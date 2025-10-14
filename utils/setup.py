@@ -6,9 +6,9 @@ from ..models import WhaleRedirectTemplate, db
 def setup_default_configs():
     for key, val in {
         'setup': 'true',
-        'docker_api_url': 'unix:///var/run/docker.sock',
+        'docker_api_url': 'tcp://172.17.0.1:2375',
         'docker_credentials': '',
-        'docker_dns': '127.0.0.1',
+        'docker_dns': '10.44.42.112',
         'docker_max_container_count': '100',
         'docker_max_renew_count': '5',
         'docker_subnet': '174.1.0.0/16',
@@ -17,11 +17,11 @@ def setup_default_configs():
         'docker_timeout': '3600',
         'frp_api_url': 'http://frpc:7400',
         'frp_http_port': '8080',
-        'frp_http_domain_suffix': '127.0.0.1.nip.io',
+        'frp_http_domain_suffix': 'challenges.cybernight-c.tf',
         'frp_direct_port_maximum': '10100',
         'frp_direct_port_minimum': '10000',
         'template_http_subdomain': '{{ container.uuid }}',
-        'template_chall_flag': '{{ "flag{"+uuid.uuid4()|string+"}" }}',
+        'template_chall_flag': '{{ "CYBN{"+uuid.uuid4()|string+"}" }}',
     }.items():
         set_config('whale:' + key, val)
     db.session.add(WhaleRedirectTemplate(

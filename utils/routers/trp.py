@@ -27,7 +27,7 @@ class TrpRouter(BaseRouter):
         ch_type = container.challenge.redirect_type
         domain = self.get_domain(container)
         port = get_config('whale:trp_listening_port', 1443)
-        if ch_type == 'direct':
+        if ch_type in ('direct', 'ssh'):
             return f'from pwn import *<br>remote("{domain}", {port}, ssl=True).interactive()'
         elif ch_type == 'http':
             return f'https://{domain}' + (f':{port}' if port != 443 else '')

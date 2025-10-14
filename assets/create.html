@@ -22,10 +22,31 @@
                 Decide the redirect type how frp redirect traffic
             </small>
         </label>
-        <select class="form-control" name="redirect_type">
+        <select class="form-control" name="redirect_type" id="redirect_type">
             <option value="http" selected>HTTP</option>
-            <option value="direct">Direct</option>
+            <option value="ssh">SSH</option>
+            <option value="direct">Direct (TCP)</option>
         </select>
+    </div>
+    
+    <div id="ssh_forms" style="display: none;">
+        <div class="form-group">
+            <label for="ssh_user">SSH User<br>
+                <small class="form-text text-muted">
+                    Enter the SSH user
+                </small>
+            </label>
+            <input type="text" class="form-control ssh_form" id="ssh_user" name="ssh_user" placeholder="Enter SSH user">
+        </div>
+
+        <div class="form-group" class="ssh_form">
+            <label for="ssh_key">SSH password<br>
+                <small class="form-text text-muted">
+                    Enter the SSH password
+                </small>
+            </label>
+            <input type="text" class="form-control ssh_form" id="ssh_key" name="ssh_key" placeholder="Enter SSH password">
+        </div>
     </div>
     <div class="form-group">
         <label for="value">Frp Redirect Port<br>
@@ -93,6 +114,29 @@
             <option value="1">Dynamic Score</option>
         </select>
     </div>
+
+    <script defer>
+    const redirect_type_select = document.getElementById('redirect_type');
+    const ssh_form = document.getElementById('ssh_forms');
+    const ssh_inputs = document.querySelectorAll('.ssh_form');
+    
+    function toggleSSH() {
+        if (select.value === 'ssh') {
+            ssh_form.style.display = 'block';
+            ssh_inputs.forEach((el) => el.required = true);
+        } else {
+            ssh_form.style.display = 'none';
+            ssh_inputs.forEach((el) => {
+                el.required = false;
+                el.value = '';
+            });
+        }
+    }
+    
+    toggleSSH();
+    
+    redirect_type_select.addEventListener('change', toggleSSH);
+    </script>
 {% endblock %}
 
 {% block type %}

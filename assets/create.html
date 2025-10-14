@@ -121,7 +121,7 @@
     const ssh_inputs = document.querySelectorAll('.ssh_form');
     
     function toggleSSH() {
-        if (select.value === 'ssh') {
+        if (redirect_type_select.value === 'ssh') {
             ssh_form.style.display = 'block';
             ssh_inputs.forEach((el) => el.required = true);
         } else {

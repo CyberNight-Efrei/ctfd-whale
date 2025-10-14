@@ -85,15 +85,16 @@ class FrpRouter(BaseRouter):
             ) from None
 
     def access(self, container: WhaleContainer):
+        html_data = ''
         if container.challenge.redirect_type == 'direct':
-            return f'<code class="click-copy">nc {get_config("whale:frp_direct_ip_address", "")} {container.port}</code>'
+            html_data = f'<code class="click-copy">nc {get_config("whale:frp_direct_ip_address", "")} {container.port}</code>'
         elif container.challenge.redirect_type == 'http':
             host = get_config("whale:frp_http_domain_suffix", "")
             port = get_config("whale:frp_http_port", "80")
             host += f':{port}' if port != 80 else ''
-            return f'<a target="_blank" href="http://{container.http_subdomain}.{host}/">Link to the Challenge</a>'
+            html_data = f'<a target="_blank" href="http://{container.http_subdomain}.{host}/">Link to the Challenge</a>'
         elif container.challenge.redirect_type == 'ssh':
-            data = f'''
+            html_data = f'''
             <code class="click-copy">ssh {container.challenge.user}@{get_config("whale:frp_direct_ip_address", "")} -p { container.port }</code>
                 <table class="table table-bordered table-sm">
                 <tr>
@@ -118,8 +119,17 @@ class FrpRouter(BaseRouter):
                 </tr>
             </table>
             '''
-            return data
-        return ''
+        css_data = '''
+        <style>
+            code {
+                pointer: cursor;
+            }
+            code:hover {
+                filter: brightness(50%);
+            }
+        </style>
+        '''
+        return html_data + css_data
 
     def register(self, container: WhaleContainer):
         if container.challenge.redirect_type in ('direct', 'ssh'):

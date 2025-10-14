@@ -122,7 +122,7 @@ class FrpRouter(BaseRouter):
         css_data = '''
         <style>
             code {
-                pointer: cursor;
+                cursor: pointer;
             }
             code:hover {
                 filter: brightness(50%);

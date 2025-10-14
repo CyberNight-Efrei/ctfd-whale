@@ -47,6 +47,8 @@ class DynamicDockerChallenge(DynamicChallenge):
 
     docker_image = db.Column(db.Text, default=0)
     redirect_type = db.Column(db.Text, default=0)
+    user = db.Column(db.Text, nullable=True, default=0)
+    password = db.Column(db.Text, nullable=True, default=0)
     redirect_port = db.Column(db.Integer, default=0)
 
     def __init__(self, *args, **kwargs):

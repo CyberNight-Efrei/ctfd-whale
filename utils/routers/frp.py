@@ -93,9 +93,6 @@ class FrpRouter(BaseRouter):
             host += f':{port}' if port != 80 else ''
             return f'<a target="_blank" href="http://{container.http_subdomain}.{host}/">Link to the Challenge</a>'
         elif container.challenge.redirect_type == 'ssh':
-            host = get_config("whale:frp_direct_ip_address", "127.0.0.1")
-            port = get_config("whale:frp_http_port", "80")
-            host += f':{port}' if port != 80 else ''
             data = f'''
             <code>ssh {container.challenge.user}@{get_config("whale:frp_direct_ip_address", "")} -p { container.port }</code>
             <table class="table table-bordered table-sm">

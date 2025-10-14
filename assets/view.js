@@ -13,14 +13,6 @@ CTFd._internal.challenge.postRender = function () {
 
 if (window.$ === undefined) window.$ = CTFd.lib.$;
 
-function copyToClipboard(event, str) {
-    navigator.clipboard.writeText(str).then(() => { alert("Copié !") });
-}
-
-document.querySelectorAll(".click-copy").forEach((el) => el.onclick = function (e) {
-    copyToClipboard(e, el.textContent);
-})
-
 function loadInfo() {
     var challenge_id = CTFd._internal.challenge.data.id;
     var url = "/api/v1/plugins/ctfd-whale/container?challenge_id=" + challenge_id;

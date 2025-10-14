@@ -17,6 +17,7 @@ class FrpRouter(BaseRouter):
     name = "frp"
     types = {
         'direct': 'tcp',
+        'ssh': 'tcp',
         'http': 'http',
     }
 

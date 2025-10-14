@@ -13,6 +13,33 @@ CTFd._internal.challenge.postRender = function () {
 
 if (window.$ === undefined) window.$ = CTFd.lib.$;
 
+function copyToClipboard(event, str) {
+    // Select element
+    const el = document.createElement('textarea');
+    el.value = str;
+    el.setAttribute('readonly', '');
+    el.style.position = 'absolute';
+    el.style.left = '-9999px';
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand('copy');
+    document.body.removeChild(el);
+
+    $(event.target).tooltip({
+        title: "Copied!",
+        trigger: "manual"
+    });
+    $(event.target).tooltip("show");
+
+    setTimeout(function () {
+        $(event.target).tooltip("hide");
+    }, 1500);
+}
+
+$(".click-copy").click(function (e) {
+    copyToClipboard(e, $(this).data("copy"));
+})
+
 function loadInfo() {
     var challenge_id = CTFd._internal.challenge.data.id;
     var url = "/api/v1/plugins/ctfd-whale/container?challenge_id=" + challenge_id;

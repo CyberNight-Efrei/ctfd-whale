@@ -95,35 +95,34 @@ class FrpRouter(BaseRouter):
         elif container.challenge.redirect_type == 'ssh':
             data = f'''
             <code>ssh {container.challenge.user}@{get_config("whale:frp_direct_ip_address", "")} -p { container.port }</code>
-            <table class="table table-bordered table-sm">
-            <tr>
-                <th>Key</th>
-                <th>Value</th>
-            </tr>
-            <tr>
-                <td>User</td>
-                <td>{ container.challenge.user }</td>
-            </tr>
-            <tr>
-                <td>Password</td>
-                <td>{ container.challenge.password }</td>
-            </tr>
-            <tr>
-                <td>IP</td>
-                <td>{get_config("whale:frp_direct_ip_address", "")}</td>
-            </tr>
-            <tr>
-                <td>Port</td>
-                <td>{ container.port }</td>
-            </tr>
-        </table>
-
+                <table class="table table-bordered table-sm">
+                <tr>
+                    <th>Key</th>
+                    <th>Value</th>
+                </tr>
+                <tr>
+                    <td>User</td>
+                    <td><code>{ container.challenge.user }</code></td>
+                </tr>
+                <tr>
+                    <td>Password</td>
+                    <td><code>{ container.challenge.password }</code></td>
+                </tr>
+                <tr>
+                    <td>IP</td>
+                    <td><code>{get_config("whale:frp_direct_ip_address", "")}</code></td>
+                </tr>
+                <tr>
+                    <td>Port</td>
+                    <td><code>{ container.port }</code></td>
+                </tr>
+            </table>
             '''
             return data
         return ''
 
     def register(self, container: WhaleContainer):
-        if container.challenge.redirect_type == 'direct':
+        if container.challenge.redirect_type in ('direct', 'ssh'):
             if not container.port:
                 port = CacheProvider(app=current_app).get_available_port()
                 if not port:
@@ -137,7 +136,7 @@ class FrpRouter(BaseRouter):
         return True, 'success'
 
     def unregister(self, container: WhaleContainer):
-        if container.challenge.redirect_type == 'direct':
+        if container.challenge.redirect_type in ('direct', 'ssh'):
             try:
                 redis_util = CacheProvider(app=current_app)
                 redis_util.add_available_port(container.port)

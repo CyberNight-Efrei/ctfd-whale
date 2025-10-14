@@ -59,7 +59,7 @@ use_compression = true
     ))
     db.session.add(WhaleRedirectTemplate(
         'ssh',
-        'ssh {{ container.user}}@{{ get_config("whale:frp_direct_ip_address", "127.0.0.1") }} -p {{ container.port }}',
+        'ssh {{ container.challenge.user}}@{{ get_config("whale:frp_direct_ip_address", "127.0.0.1") }} -p {{ container.port }}',
         '''
 [ssh_{{ container.user_id|string }}-{{ container.uuid }}]
 type = tcp

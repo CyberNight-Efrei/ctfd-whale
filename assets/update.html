@@ -56,30 +56,30 @@
     </div>
     <div id="login_fields" style="{% if challenge.redirect_type == 'ssh' %}display:block;{% else %}display:none;{% endif %}">
         <div class="form-group">
-            <label for="login_user">Login User<br>
+            <label for="user">Login User<br>
                 <small class="form-text text-muted">
-                    Enter the Login User
+                    Enter the login User
                 </small>
             </label>
             <input type="text"
                    class="form-control login_field"
-                   id="login_user"
-                   name="login_user"
-                   placeholder="Enter Login User"
+                   id="user"
+                   name="user"
+                   placeholder="Enter login User"
                    value="{{ challenge.user or '' }}"
                    {% if challenge.redirect_type == 'ssh' %}required{% endif %}>
         </div>
 
         <div class="form-group">
-            <label for="login_password">Login Password<br>
+            <label for="password">Login Password<br>
                 <small class="form-text text-muted">
-                    Enter the Login Password
+                    Enter the login Password
                 </small>
             </label>
             <input type="password"
                    class="form-control login_field"
-                   id="login_key"
-                   name="login_key"
+                   id="password"
+                   name="password"
                    placeholder="Enter Login Password"
                    value="{{ challenge.password or '' }}"
                    {% if challenge.redirect_type == 'ssh' %}required{% endif %}>

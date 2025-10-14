@@ -135,7 +135,7 @@ class FrpRouter(BaseRouter):
         function copyToClipboard(event, str) {
             CTFd._functions.events.eventAlert({
                 title: "Success",
-                html: "Your instance has been destroyed!",
+                html: "Content has been copied to your clipboard.",
                 button: "OK"
             });
             navigator.clipboard.writeText(str).then(() => { alert("Copié !") });

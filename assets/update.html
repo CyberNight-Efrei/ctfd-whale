@@ -54,34 +54,34 @@
             <option value="direct" {% if challenge.redirect_type == "direct" %}selected{% endif %}>Direct (TCP)</option>
         </select>
     </div>
-    <div id="ssh_fields" style="{% if challenge.redirect_type == 'ssh' %}display:block;{% else %}display:none;{% endif %}">
+    <div id="login_fields" style="{% if challenge.redirect_type == 'ssh' %}display:block;{% else %}display:none;{% endif %}">
         <div class="form-group">
-            <label for="ssh_user">SSH User<br>
+            <label for="login_user">Login User<br>
                 <small class="form-text text-muted">
-                    Enter the SSH user
+                    Enter the Login User
                 </small>
             </label>
             <input type="text"
-                   class="form-control ssh_field"
-                   id="ssh_user"
-                   name="ssh_user"
-                   placeholder="Enter SSH user"
-                   value="{{ challenge.ssh_user or '' }}"
+                   class="form-control login_field"
+                   id="login_user"
+                   name="login_user"
+                   placeholder="Enter Login User"
+                   value="{{ challenge.user or '' }}"
                    {% if challenge.redirect_type == 'ssh' %}required{% endif %}>
         </div>
 
         <div class="form-group">
-            <label for="ssh_key">SSH Password<br>
+            <label for="login_password">Login Password<br>
                 <small class="form-text text-muted">
-                    Enter the SSH password
+                    Enter the Login Password
                 </small>
             </label>
             <input type="password"
-                   class="form-control ssh_field"
-                   id="ssh_key"
-                   name="ssh_key"
-                   placeholder="Enter SSH password"
-                   value="{{ challenge.ssh_key or '' }}"
+                   class="form-control login_field"
+                   id="login_key"
+                   name="login_key"
+                   placeholder="Enter Login Password"
+                   value="{{ challenge.password or '' }}"
                    {% if challenge.redirect_type == 'ssh' %}required{% endif %}>
         </div>
     </div>
@@ -125,16 +125,16 @@
     </div>
     <script defer>
     const redirect_type_select = document.getElementById('redirect_type');
-    const ssh_fields = document.getElementById('ssh_fields');
-    const ssh_inputs = document.querySelectorAll('.ssh_field');
+    const login_fields = document.getElementById('login_fields');
+    const login_inputs = document.querySelectorAll('.login_field');
 
     function toggleSSH() {
         if (redirect_type_select.value === 'ssh') {
-            ssh_fields.style.display = 'block';
-            ssh_inputs.forEach(el => el.required = true);
+            login_fields.style.display = 'block';
+            login_inputs.forEach(el => el.required = true);
         } else {
-            ssh_fields.style.display = 'none';
-            ssh_inputs.forEach(el => {
+            login_fields.style.display = 'none';
+            login_inputs.forEach(el => {
                 el.required = false;
                 el.value = '';
             });

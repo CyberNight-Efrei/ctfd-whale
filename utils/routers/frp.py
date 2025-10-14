@@ -86,7 +86,7 @@ class FrpRouter(BaseRouter):
 
     def access(self, container: WhaleContainer):
         if container.challenge.redirect_type == 'direct':
-            return f'<code>nc {get_config("whale:frp_direct_ip_address", "")} {container.port}</code>'
+            return f'<code class="click-copy">nc {get_config("whale:frp_direct_ip_address", "")} {container.port}</code>'
         elif container.challenge.redirect_type == 'http':
             host = get_config("whale:frp_http_domain_suffix", "")
             port = get_config("whale:frp_http_port", "80")
@@ -94,7 +94,7 @@ class FrpRouter(BaseRouter):
             return f'<a target="_blank" href="http://{container.http_subdomain}.{host}/">Link to the Challenge</a>'
         elif container.challenge.redirect_type == 'ssh':
             data = f'''
-            <code>ssh {container.challenge.user}@{get_config("whale:frp_direct_ip_address", "")} -p { container.port }</code>
+            <code class="click-copy">ssh {container.challenge.user}@{get_config("whale:frp_direct_ip_address", "")} -p { container.port }</code>
                 <table class="table table-bordered table-sm">
                 <tr>
                     <th>Key</th>
@@ -102,19 +102,19 @@ class FrpRouter(BaseRouter):
                 </tr>
                 <tr>
                     <td>User</td>
-                    <td><code>{ container.challenge.user }</code></td>
+                    <td><code class="click-copy">{ container.challenge.user }</code></td>
                 </tr>
                 <tr>
                     <td>Password</td>
-                    <td><code>{ container.challenge.password }</code></td>
+                    <td><code class="click-copy">{ container.challenge.password }</code></td>
                 </tr>
                 <tr>
                     <td>IP</td>
-                    <td><code>{get_config("whale:frp_direct_ip_address", "")}</code></td>
+                    <td><code class="click-copy">{get_config("whale:frp_direct_ip_address", "")}</code></td>
                 </tr>
                 <tr>
                     <td>Port</td>
-                    <td><code>{ container.port }</code></td>
+                    <td><code class="click-copy">{ container.port }</code></td>
                 </tr>
             </table>
             '''

@@ -141,9 +141,9 @@ class FrpRouter(BaseRouter):
             navigator.clipboard.writeText(str).then(() => { alert("Copié !") });
         }
 
-        document.querySelectorAll(".click-copy").forEach((el) => if (!el.onclick) el.onclick = function (e) {
+        document.querySelectorAll(".click-copy").forEach((el) => { if (!el.onclick) el.onclick = function (e) {
             copyToClipboard(e, el.textContent);
-        })
+        } })
         </script>
         '''
         return html_data + css_data + js_data

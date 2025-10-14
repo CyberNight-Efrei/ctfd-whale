@@ -76,7 +76,7 @@
                     Enter the login Password
                 </small>
             </label>
-            <input type="password"
+            <input type="text"
                    class="form-control login_field"
                    id="password"
                    name="password"
@@ -134,10 +134,7 @@
             login_inputs.forEach(el => el.required = true);
         } else {
             login_fields.style.display = 'none';
-            login_inputs.forEach(el => {
-                el.required = false;
-                el.value = '';
-            });
+            login_inputs.forEach(el => el.required = false);
         }
     }
 

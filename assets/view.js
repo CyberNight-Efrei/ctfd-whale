@@ -14,30 +14,11 @@ CTFd._internal.challenge.postRender = function () {
 if (window.$ === undefined) window.$ = CTFd.lib.$;
 
 function copyToClipboard(event, str) {
-    // Select element
-    const el = document.createElement('textarea');
-    el.value = str;
-    el.setAttribute('readonly', '');
-    el.style.position = 'absolute';
-    el.style.left = '-9999px';
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand('copy');
-    document.body.removeChild(el);
-
-    $(event.target).tooltip({
-        title: "Copied!",
-        trigger: "manual"
-    });
-    $(event.target).tooltip("show");
-
-    setTimeout(function () {
-        $(event.target).tooltip("hide");
-    }, 1500);
+    navigator.clipboard.writeText(str).then(() => { alert("Copié !") });
 }
 
 document.querySelectorAll(".click-copy").forEach((el) => el.onclick = function (e) {
-    copyToClipboard(e, $(this).data("copy"));
+    copyToClipboard(e, el.textContent);
 })
 
 function loadInfo() {

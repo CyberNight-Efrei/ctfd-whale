@@ -67,7 +67,7 @@ class DockerUtils:
         client.services.create(
             image=container.challenge.docker_image,
             name=f'{container.user_id}-{container.uuid}',
-            env={'FLAG': container.flag}, dns_config=docker.types.DNSConfig(nameservers=dns),
+            env={'DYNAMIC_FLAG': container.flag}, dns_config=docker.types.DNSConfig(nameservers=dns),
             networks=[get_config("whale:docker_auto_connect_network", "ctfd_frp-containers")],
             resources=docker.types.Resources(
                 mem_limit=DockerUtils.convert_readable_text(

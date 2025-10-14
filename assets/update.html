@@ -124,12 +124,12 @@
         </select>
     </div>
     <script defer>
-    const select = document.getElementById('redirect_type');
+    const redirect_type_select = document.getElementById('redirect_type');
     const ssh_fields = document.getElementById('ssh_fields');
     const ssh_inputs = document.querySelectorAll('.ssh_field');
 
     function toggleSSH() {
-        if (select.value === 'ssh') {
+        if (redirect_type_select.value === 'ssh') {
             ssh_fields.style.display = 'block';
             ssh_inputs.forEach(el => el.required = true);
         } else {
@@ -143,6 +143,6 @@
 
     toggleSSH();
 
-    select.addEventListener('change', toggleSSH);
+    redirect_type_select.addEventListener('change', toggleSSH);
     </script>
 {% endblock %}

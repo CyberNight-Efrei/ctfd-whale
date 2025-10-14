@@ -29,23 +29,23 @@
         </select>
     </div>
     
-    <div id="ssh_forms" style="display: none;">
-        <div class="form-group">
-            <label for="ssh_user">SSH User<br>
+    <div id="login_forms" style="display: none;">
+        <div class="form-group login_form">
+            <label for="login_user">User<br>
                 <small class="form-text text-muted">
-                    Enter the SSH user
+                    Enter the login User
                 </small>
             </label>
-            <input type="text" class="form-control ssh_form" id="ssh_user" name="ssh_user" placeholder="Enter SSH user">
+            <input type="text" class="form-control login_form" id="user" name="user" placeholder="Enter login User">
         </div>
 
-        <div class="form-group" class="ssh_form">
-            <label for="ssh_key">SSH password<br>
+        <div class="form-group login_form">
+            <label for="login_key">Password<br>
                 <small class="form-text text-muted">
-                    Enter the SSH password
+                    Enter the login Password
                 </small>
             </label>
-            <input type="text" class="form-control ssh_form" id="ssh_key" name="ssh_key" placeholder="Enter SSH password">
+            <input type="text" class="form-control login_form" id="key" name="key" placeholder="Enter login Password">
         </div>
     </div>
     <div class="form-group">
@@ -117,16 +117,16 @@
 
     <script defer>
     const redirect_type_select = document.getElementById('redirect_type');
-    const ssh_form = document.getElementById('ssh_forms');
-    const ssh_inputs = document.querySelectorAll('.ssh_form');
+    const login_form = document.getElementById('login_forms');
+    const login_inputs = document.querySelectorAll('.login_form');
     
     function toggleSSH() {
         if (redirect_type_select.value === 'ssh') {
-            ssh_form.style.display = 'block';
-            ssh_inputs.forEach((el) => el.required = true);
+            login_form.style.display = 'block';
+            login_inputs.forEach((el) => el.required = true);
         } else {
-            ssh_form.style.display = 'none';
-            ssh_inputs.forEach((el) => {
+            login_form.style.display = 'none';
+            login_inputs.forEach((el) => {
                 el.required = false;
                 el.value = '';
             });

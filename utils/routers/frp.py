@@ -86,11 +86,42 @@ class FrpRouter(BaseRouter):
 
     def access(self, container: WhaleContainer):
         if container.challenge.redirect_type == 'direct':
-            return f'nc {get_config("whale:frp_direct_ip_address", "127.0.0.1")} {container.port}'
+            return f'<code>nc {get_config("whale:frp_direct_ip_address", "")} {container.port}</code>'
         elif container.challenge.redirect_type == 'http':
             host = get_config("whale:frp_http_domain_suffix", "")
             port = get_config("whale:frp_http_port", "80")
             host += f':{port}' if port != 80 else ''
+            return f'<a target="_blank" href="http://{container.http_subdomain}.{host}/">Link to the Challenge</a>'
+        elif container.challenge.redirect_type == 'ssh':
+            host = get_config("whale:frp_direct_ip_address", "127.0.0.1")
+            port = get_config("whale:frp_http_port", "80")
+            host += f':{port}' if port != 80 else ''
+            data = f'''
+            <code>ssh {container.user}@{get_config("whale:frp_direct_ip_address", "")} -p { container.port }</code>
+            <table class="table table-bordered table-sm">
+            <tr>
+                <th>Key</th>
+                <th>Value</th>
+            </tr>
+            <tr>
+                <td>User</td>
+                <td>{ container.user }</td>
+            </tr>
+            <tr>
+                <td>Password</td>
+                <td>{ container.password }</td>
+            </tr>
+            <tr>
+                <td>IP</td>
+                <td>{get_config("whale:frp_direct_ip_address", "")}</td>
+            </tr>
+            <tr>
+                <td>Port</td>
+                <td>{ container.port }</td>
+            </tr>
+        </table>
+
+            '''
             return f'<a target="_blank" href="http://{container.http_subdomain}.{host}/">Link to the Challenge</a>'
         return ''
 

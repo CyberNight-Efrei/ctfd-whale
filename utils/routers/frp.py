@@ -97,7 +97,7 @@ class FrpRouter(BaseRouter):
             port = get_config("whale:frp_http_port", "80")
             host += f':{port}' if port != 80 else ''
             data = f'''
-            <code>ssh {container.user}@{get_config("whale:frp_direct_ip_address", "")} -p { container.port }</code>
+            <code>ssh {container.challenge.user}@{get_config("whale:frp_direct_ip_address", "")} -p { container.port }</code>
             <table class="table table-bordered table-sm">
             <tr>
                 <th>Key</th>
@@ -105,11 +105,11 @@ class FrpRouter(BaseRouter):
             </tr>
             <tr>
                 <td>User</td>
-                <td>{ container.user }</td>
+                <td>{ container.challenge.user }</td>
             </tr>
             <tr>
                 <td>Password</td>
-                <td>{ container.password }</td>
+                <td>{ container.challenge.password }</td>
             </tr>
             <tr>
                 <td>IP</td>
@@ -122,7 +122,7 @@ class FrpRouter(BaseRouter):
         </table>
 
             '''
-            return f'<a target="_blank" href="http://{container.http_subdomain}.{host}/">Link to the Challenge</a>'
+            return data
         return ''
 
     def register(self, container: WhaleContainer):

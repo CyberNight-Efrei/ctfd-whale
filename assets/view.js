@@ -36,7 +36,7 @@ function copyToClipboard(event, str) {
     }, 1500);
 }
 
-$(".click-copy").click(function (e) {
+document.querySelectorAll(".click-copy").forEach((el) => el.onclick = function (e) {
     copyToClipboard(e, $(this).data("copy"));
 })
 

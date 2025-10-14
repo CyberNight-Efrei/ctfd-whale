@@ -129,7 +129,24 @@ class FrpRouter(BaseRouter):
             }
         </style>
         '''
-        return html_data + css_data
+
+        js_data = '''
+        <script defer>
+        function copyToClipboard(event, str) {
+            CTFd._functions.events.eventAlert({
+                title: "Success",
+                html: "Your instance has been destroyed!",
+                button: "OK"
+            });
+            navigator.clipboard.writeText(str).then(() => { alert("Copié !") });
+        }
+
+        document.querySelectorAll(".click-copy").forEach((el) => if (!el.onclick) el.onclick = function (e) {
+            copyToClipboard(e, el.textContent);
+        })
+        </script>
+        '''
+        return html_data + css_data + js_data
 
     def register(self, container: WhaleContainer):
         if container.challenge.redirect_type in ('direct', 'ssh'):

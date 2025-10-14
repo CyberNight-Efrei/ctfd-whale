@@ -57,4 +57,16 @@ remote_port = {{ container.port }}
 use_compression = true
 '''
     ))
+    db.session.add(WhaleRedirectTemplate(
+        'ssh',
+        'ssh {{ container.user}}@{{ get_config("whale:frp_direct_ip_address", "127.0.0.1") }} -p {{ container.port }}',
+        '''
+[ssh_{{ container.user_id|string }}-{{ container.uuid }}]
+type = ssh
+local_ip = {{ container.user_id|string }}-{{ container.uuid }}
+local_port = {{ container.challenge.redirect_port }}
+remote_port = {{ container.port }}
+use_compression = true
+'''
+    ))
     db.session.commit()

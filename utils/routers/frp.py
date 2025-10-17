@@ -138,7 +138,7 @@ class FrpRouter(BaseRouter):
                 html: "Content has been copied to your clipboard.",
                 button: "OK"
             });
-            navigator.clipboard.writeText(str).then(() => { alert("Copié !") });
+            navigator.clipboard.writeText(str);
         }
 
         document.querySelectorAll(".click-copy").forEach((el) => { if (!el.onclick) el.onclick = function (e) {

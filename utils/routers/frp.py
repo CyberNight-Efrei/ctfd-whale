@@ -85,41 +85,57 @@ class FrpRouter(BaseRouter):
             ) from None
 
     def access(self, container: WhaleContainer):
-        html_data = ''
+        code    = ''
+        host    = ''
+        port    = ''
         if container.challenge.redirect_type == 'direct':
-            html_data = f'<code class="click-copy">nc {get_config("whale:frp_direct_ip_address", "")} {container.port}</code>'
+            host = get_config("whale:frp_direct_ip_address", "")
+            port = container.port
+            code = f'<code class="click-copy fs-5">nc { host } { port }</code>'
         elif container.challenge.redirect_type == 'http':
-            host = get_config("whale:frp_http_domain_suffix", "")
             port = get_config("whale:frp_http_port", "80")
-            host += f':{port}' if port != 80 else ''
-            html_data = f'<a target="_blank" href="http://{container.http_subdomain}.{host}/">Link to the Challenge</a>'
+            host = f'{ container.http_subdomain }.{ get_config("whale:frp_http_domain_suffix", "") }:{ port }'
+            code = f'<a class="fs-5" target="_blank" href="http://{ host }/">Link to the Challenge 🚀</a>'
         elif container.challenge.redirect_type == 'ssh':
-            html_data = f'''
-            <code class="click-copy">ssh {container.challenge.user}@{get_config("whale:frp_direct_ip_address", "")} -p { container.port }</code>
-                <table class="table table-bordered table-sm">
+            host = get_config("whale:frp_direct_ip_address", "")
+            port = container.port
+            code = f'<code class="click-copy fs-5">ssh { container.challenge.user }@{ host } -p { port }</code>'
+
+        challenge_data = {
+            'User': container.challenge.user,
+            'Password': container.challenge.password,
+            'Host': host,
+            'Port': port
+        }
+
+        is_valid = lambda v: not (
+            v is None
+            or (isinstance(v, str) and not v.strip())
+        )
+
+        table = ''
+        for key, value in challenge_data.items():
+            if not is_valid(value):
+                continue
+
+            table += f'''<tr>
+                    <td>{ key }</td>
+                    <td><code class="click-copy">{ value }</code></td>
+                </tr>
+            '''
+
+        html = f'''{ code }
+            <hr>
+            <table class="table table-bordered table-sm">
                 <tr>
                     <th>Key</th>
                     <th>Value</th>
                 </tr>
-                <tr>
-                    <td>User</td>
-                    <td><code class="click-copy">{ container.challenge.user }</code></td>
-                </tr>
-                <tr>
-                    <td>Password</td>
-                    <td><code class="click-copy">{ container.challenge.password }</code></td>
-                </tr>
-                <tr>
-                    <td>IP</td>
-                    <td><code class="click-copy">{get_config("whale:frp_direct_ip_address", "")}</code></td>
-                </tr>
-                <tr>
-                    <td>Port</td>
-                    <td><code class="click-copy">{ container.port }</code></td>
-                </tr>
+                { table }
             </table>
-            '''
-        css_data = '''
+        '''
+
+        css = '''
         <style>
             code {
                 cursor: pointer;
@@ -130,7 +146,7 @@ class FrpRouter(BaseRouter):
         </style>
         '''
 
-        js_data = '''
+        js = '''
         <script defer>
         function copyToClipboard(event, str) {
             CTFd._functions.events.eventAlert({
@@ -146,7 +162,7 @@ class FrpRouter(BaseRouter):
         } })
         </script>
         '''
-        return html_data + css_data + js_data
+        return html + css + js
 
     def register(self, container: WhaleContainer):
         if container.challenge.redirect_type in ('direct', 'ssh'):

@@ -51,7 +51,7 @@
         <select class="form-control" name="redirect_type" id="redirect_type">
             <option value="http" {% if challenge.redirect_type == "http" %}selected{% endif %}>HTTP</option>
             <option value="ssh" {% if challenge.redirect_type == "ssh" %}selected{% endif %}>SSH</option>
-            <option value="direct" {% if challenge.redirect_type == "direct" %}selected{% endif %}>Direct (TCP)</option>
+            <option value="tcp" {% if challenge.redirect_type == "tcp" %}selected{% endif %}>Direct (TCP)</option>
         </select>
     </div>
     <div id="login_fields" style="{% if challenge.redirect_type == 'ssh' %}display:block;{% else %}display:none;{% endif %}">

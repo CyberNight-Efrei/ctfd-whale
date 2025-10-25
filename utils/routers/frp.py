@@ -16,7 +16,7 @@ from ...models import WhaleContainer
 class FrpRouter(BaseRouter):
     name = "frp"
     types = {
-        'direct': 'tcp',
+        'tcp': 'tcp',
         'ssh': 'tcp',
         'http': 'http',
     }
@@ -88,7 +88,7 @@ class FrpRouter(BaseRouter):
         code    = ''
         host    = ''
         port    = ''
-        if container.challenge.redirect_type == 'direct':
+        if container.challenge.redirect_type == 'tcp':
             host = get_config("whale:frp_direct_ip_address", "")
             port = container.port
             code = f'<code class="click-copy fs-5">nc { host } { port }</code>'
@@ -165,7 +165,7 @@ class FrpRouter(BaseRouter):
         return html + css + js
 
     def register(self, container: WhaleContainer):
-        if container.challenge.redirect_type in ('direct', 'ssh'):
+        if container.challenge.redirect_type in ('tcp', 'ssh'):
             if not container.port:
                 port = CacheProvider(app=current_app).get_available_port()
                 if not port:
@@ -179,7 +179,7 @@ class FrpRouter(BaseRouter):
         return True, 'success'
 
     def unregister(self, container: WhaleContainer):
-        if container.challenge.redirect_type in ('direct', 'ssh'):
+        if container.challenge.redirect_type in ('tcp', 'ssh'):
             try:
                 redis_util = CacheProvider(app=current_app)
                 redis_util.add_available_port(container.port)

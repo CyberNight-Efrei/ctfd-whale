@@ -10,6 +10,7 @@ from CTFd.utils import get_config
 
 from .cache import CacheProvider
 from .exceptions import WhaleError
+from .db import DBContainer
 
 
 def get_docker_client():
@@ -80,6 +81,8 @@ class DockerUtils:
             constraints=['node.labels.name==' + node],
             endpoint_spec=docker.types.EndpointSpec(mode='dnsrr', ports={})
         )
+
+        DBContainer.add_container_node(container, node)
 
     @staticmethod
     def _create_grouped_container(client, container):

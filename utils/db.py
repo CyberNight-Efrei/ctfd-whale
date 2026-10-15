@@ -15,6 +15,14 @@ class DBContainer:
         return container
 
     @staticmethod
+    def add_container_node(container, node):
+        container.node = node
+        db.session.add(container)
+        db.session.commit()
+
+        return container
+
+    @staticmethod
     def get_current_containers(user_id):
         q = db.session.query(WhaleContainer)
         q = q.filter(WhaleContainer.user_id == user_id)

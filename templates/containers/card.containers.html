@@ -33,6 +33,8 @@
                         >{{ container.user.name | truncate(5) }}
                         </a>
                     </h6>
+                    <p class="card-text">Node : {{ container.node }}</p>
+                    <p class="card-text">{{ container.uuid }}</p>
                     <p class="card-text">{{ container.user_access }}</p>
                     <p class="card-text">{{ container.flag }}</p>
                     Time Started: {{ container.start_time }}

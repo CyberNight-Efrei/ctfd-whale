@@ -64,6 +64,7 @@ class WhaleContainer(db.Model):
     renew_count = db.Column(db.Integer, nullable=False, default=0)
     status = db.Column(db.Integer, default=1)
     uuid = db.Column(db.String(256))
+    node = db.Column(db.String(64), nullable=True)
     port = db.Column(db.Integer, nullable=True, default=0)
     flag = db.Column(db.String(128), nullable=False)
 

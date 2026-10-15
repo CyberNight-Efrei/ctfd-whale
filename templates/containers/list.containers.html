@@ -9,6 +9,8 @@
                     </div>
                 </th>
                 <th class="sort-col text-center"><b>ID</b></td>
+                <th class="text-center"><b>UUID</b></td>
+                <th class="text-center"><b>Node</b></td>
                 <th class="text-center"><b>User</b></td>
                 <th class="sort-col text-center"><b>Challenge</b></td>
                 <th class="text-center"><b>Access Method</b></td>
@@ -28,6 +30,15 @@
                     </td>
                     <td class="text-center">
                         {{ container.id }}
+                    </td>
+                    <td class="text-center">
+                        {{ container.uuid | truncate(8) }}&nbsp;
+                        <button class="btn btn-link p-0 click-copy" data-copy="{{ container.uuid }}">
+                            <i class="fas fa-clipboard"></i>
+                        </button>
+                    </td>
+                    <td class="text-center">
+                        {{ container.node }}
                     </td>
                     <td class="text-center">
                         <a href="{{ url_for('admin.users_detail', user_id=container.user.id) }}">

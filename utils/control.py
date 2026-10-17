@@ -109,14 +109,34 @@ class ControlUtil:
             return False, (
                 "An instance already exists for this user. Clean it up before starting another."
             )
+        capacity_lock = CacheProvider(app=current_app, user_id=user_id)
         try:
-            container = DBContainer.create_container_record(user_id, challenge_id)
-        except ValueError as exc:
-            return False, str(exc)
+            if not capacity_lock.acquire_capacity_lock():
+                return False, "Unable to reserve instance capacity right now. Please retry."
         except Exception:
-            db.session.rollback()
-            logging.exception("Unable to prepare port mappings for Whale instance")
-            return False, "Unable to prepare this challenge's port mappings. Check the CTFd-Whale logs."
+            logging.exception("Unable to acquire the global instance capacity lock")
+            return False, "Unable to reserve instance capacity right now. Please retry."
+
+        try:
+            # The row itself reserves one capacity slot. Every creator checks
+            # and inserts under this short global lock, then provisions in parallel.
+            maximum = int(get_config("whale:docker_max_container_count", "100"))
+            current_count = DBContainer.get_all_container_count()
+            if current_count >= maximum:
+                return False, "Max container count exceed."
+            try:
+                container = DBContainer.create_container_record(user_id, challenge_id)
+            except ValueError as exc:
+                return False, str(exc)
+            except Exception:
+                db.session.rollback()
+                logging.exception("Unable to prepare port mappings for Whale instance")
+                return False, "Unable to prepare this challenge's port mappings. Check the CTFd-Whale logs."
+        finally:
+            try:
+                capacity_lock.release_capacity_lock()
+            except Exception:
+                logging.exception("Unable to release the global instance capacity lock")
 
         try:
             DockerUtils.add_container(container)

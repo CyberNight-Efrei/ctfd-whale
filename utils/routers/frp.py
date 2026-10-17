@@ -77,7 +77,7 @@ class FrpRouter(BaseRouter):
 
     def reload(self, exclude=None):
         rules = []
-        for container in DBContainer.get_all_alive_container():
+        for container in DBContainer.get_routable_containers():
             if container.uuid == exclude:
                 continue
             rules.extend(self._rules_for_container(container))

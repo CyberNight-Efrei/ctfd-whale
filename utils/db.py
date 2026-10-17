@@ -147,6 +147,30 @@ class DBContainer:
         return q.all()
 
     @staticmethod
+    def get_routable_containers():
+        """Instances whose FRP/TRP routes are meant to exist right now.
+
+        New rows begin in PROVISIONING and may not have allocated public ports
+        yet. STOPPING/CLEANUP_PENDING rows must not be reintroduced by a router
+        reload. Existing rows with a NULL status remain routable for compatibility.
+        """
+        timeout = int(get_config("whale:docker_timeout", "3600"))
+        alive_since = datetime.datetime.now() - datetime.timedelta(seconds=timeout)
+        q = db.session.query(WhaleContainer).filter(
+            WhaleContainer.start_time >= alive_since,
+            or_(
+                WhaleContainer.status.is_(None),
+                WhaleContainer.status.in_(
+                    (
+                        WhaleContainer.STATUS_READY,
+                        WhaleContainer.STATUS_STARTING,
+                    )
+                ),
+            ),
+        )
+        return q.all()
+
+    @staticmethod
     def get_all_container():
         return db.session.query(WhaleContainer).all()
 

@@ -4,32 +4,89 @@ function htmlentities(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function copyToClipboard(event, str) {
-    // Select element
-    const el = document.createElement('textarea');
-    el.value = str;
-    el.setAttribute('readonly', '');
-    el.style.position = 'absolute';
-    el.style.left = '-9999px';
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand('copy');
-    document.body.removeChild(el);
-
-    $(event.target).tooltip({
-        title: "Copied!",
-        trigger: "manual"
+function htmlToPlainText(markup) {
+    const wrapper = document.createElement("div");
+    wrapper.innerHTML = String(markup || "");
+    wrapper.querySelectorAll("script, style").forEach((element) => element.remove());
+    wrapper.querySelectorAll("br, hr").forEach((element) => {
+        element.insertAdjacentText("beforebegin", "\n");
+        element.remove();
     });
-    $(event.target).tooltip("show");
-
-    setTimeout(function () {
-        $(event.target).tooltip("hide");
-    }, 1500);
+    wrapper.querySelectorAll("li, tr, p, h1, h2, h3, h4, h5, h6").forEach((element) => {
+        element.insertAdjacentText("beforebegin", "\n");
+        element.insertAdjacentText("afterend", "\n");
+    });
+    return wrapper.textContent
+        .replace(/\\u00a0/g, " ")
+        .replace(/[ \\t]+/g, " ")
+        .replace(/ *\\n */g, "\n")
+        .replace(/\\n{2,}/g, "\n")
+        .trim();
 }
 
-$(".click-copy").click(function (e) {
-    copyToClipboard(e, $(this).data("copy"));
-})
+async function writeClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (error) {
+            // Clipboard API can be unavailable outside a secure context.
+        }
+    }
+
+    const field = document.createElement("textarea");
+    field.value = text;
+    field.setAttribute("readonly", "");
+    field.style.position = "fixed";
+    field.style.opacity = "0";
+    field.style.pointerEvents = "none";
+    document.body.appendChild(field);
+    field.select();
+    let copied = false;
+    try {
+        copied = document.execCommand("copy");
+    } catch (error) {
+        copied = false;
+    }
+    field.remove();
+    return copied;
+}
+
+async function copyToClipboard(button, value) {
+    const text = String(value == null ? "" : value).trim();
+    if (!text) return;
+
+    const copied = await writeClipboard(text);
+    const target = $(button);
+    target.tooltip("dispose");
+    target.tooltip({
+        title: copied ? "Copied!" : "Copy failed",
+        trigger: "manual",
+        placement: "top"
+    });
+    target.tooltip("show");
+
+    if (button._whaleCopyTimer) {
+        clearTimeout(button._whaleCopyTimer);
+    }
+    button._whaleCopyTimer = setTimeout(function () {
+        target.tooltip("hide");
+    }, 1600);
+}
+
+$(document).on("click", ".click-copy", async function (event) {
+    event.preventDefault();
+    let value;
+    if (this.hasAttribute("data-copy-html")) {
+        value = htmlToPlainText(this.getAttribute("data-copy-html"));
+    } else if (this.hasAttribute("data-copy")) {
+        value = this.getAttribute("data-copy");
+    } else {
+        // Also supports copyable commands rendered inside access details.
+        value = this.textContent;
+    }
+    await copyToClipboard(this, value);
+});
 
 async function delete_container(user_id) {
     let response = await CTFd.fetch("/api/v1/plugins/ctfd-whale/admin/container?user_id=" + user_id, {
@@ -62,8 +119,8 @@ $('#containers-renew-button').click(function (e) {
         return $(this).data("user-id");
     });
     CTFd.ui.ezq.ezQuery({
-        title: "Renew Containers",
-        body: `Are you sure you want to renew the selected ${users.length} container(s)?`,
+        title: "Renew instances",
+        body: `Are you sure you want to renew the selected ${users.length} instance(s)?`,
         success: async function () {
             await Promise.all(users.toArray().map((user) => renew_container(user)));
             location.reload();
@@ -76,8 +133,8 @@ $('#containers-delete-button').click(function (e) {
         return $(this).data("user-id");
     });
     CTFd.ui.ezq.ezQuery({
-        title: "Delete Containers",
-        body: `Are you sure you want to delete the selected ${users.length} container(s)?`,
+        title: "Stop instances",
+        body: `Are you sure you want to stop the selected ${users.length} instance(s)?`,
         success: async function () {
             await Promise.all(users.toArray().map((user) => delete_container(user)));
             location.reload();
@@ -91,7 +148,7 @@ $(".delete-container").click(function (e) {
     let user_id = $(this).attr("user-id");
 
     CTFd.ui.ezq.ezQuery({
-        title: "Destroy Container",
+        title: "Stop instance",
         body: "<span>Are you sure you want to delete <strong>Container #{0}</strong>?</span>".format(
             htmlentities(container_id)
         ),
@@ -108,7 +165,7 @@ $(".renew-container").click(function (e) {
     let user_id = $(this).attr("user-id");
 
     CTFd.ui.ezq.ezQuery({
-        title: "Renew Container",
+        title: "Renew instance",
         body: "<span>Are you sure you want to renew <strong>Container #{0}</strong>?</span>".format(
             htmlentities(container_id)
         ),

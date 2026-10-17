@@ -339,12 +339,17 @@ class RedisCacheProvider(FlaskRedis):
         if lock is None:
             return None
         try:
-            value = self.spop(self.global_port_key)
-            if value is None:
-                return None
-            port = int(value)
-            self.set(self._reservation_key("port", port), "1", ex=RESERVATION_TTL_SECONDS)
-            return port
+            while True:
+                value = self.spop(self.global_port_key)
+                if value is None:
+                    return None
+                port = int(value)
+                reservation_key = self._reservation_key("port", port)
+                if self.exists(reservation_key):
+                    # Discard stale pool entries that conflict with a live lease.
+                    continue
+                self.set(reservation_key, "1", ex=RESERVATION_TTL_SECONDS)
+                return port
         finally:
             lock.release()
 
@@ -377,16 +382,21 @@ class RedisCacheProvider(FlaskRedis):
         if lock is None:
             return None
         try:
-            value = self.spop(self.global_network_key)
-            if value is None:
-                return None
-            subnet = value.decode() if isinstance(value, bytes) else str(value)
-            self.set(
-                self._reservation_key("network", subnet),
-                "1",
-                ex=RESERVATION_TTL_SECONDS,
-            )
-            return subnet
+            while True:
+                value = self.spop(self.global_network_key)
+                if value is None:
+                    return None
+                subnet = value.decode() if isinstance(value, bytes) else str(value)
+                reservation_key = self._reservation_key("network", subnet)
+                if self.exists(reservation_key):
+                    # Discard stale pool entries that conflict with a live lease.
+                    continue
+                self.set(
+                    reservation_key,
+                    "1",
+                    ex=RESERVATION_TTL_SECONDS,
+                )
+                return subnet
         finally:
             lock.release()
 

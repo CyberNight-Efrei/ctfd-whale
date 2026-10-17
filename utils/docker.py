@@ -182,6 +182,7 @@ class DockerUtils:
             labels = {
                 "running": ("Running", "success"),
                 "starting": ("Starting", "info"),
+                "stopped": ("Stopped", "secondary"),
                 "degraded": ("Degraded", "warning"),
                 "error": ("Error", "danger"),
                 "missing": ("Service missing", "danger"),
@@ -235,6 +236,7 @@ class DockerUtils:
 
         services_by_label = {label: [] for label in instance_by_label}
         service_by_id = {}
+        service_objects = {}
         for service in services:
             attrs = getattr(service, "attrs", {}) or {}
             spec = attrs.get("Spec", {}) or {}
@@ -247,6 +249,7 @@ class DockerUtils:
                 continue
             services_by_label[instance_label].append(service_id)
             service_by_id[service_id] = instance_label
+            service_objects[service_id] = service
 
         relevant_service_ids = list(service_by_id)
         tasks_by_service = {service_id: [] for service_id in relevant_service_ids}
@@ -284,6 +287,16 @@ class DockerUtils:
 
             per_service_states = []
             for service_id in service_ids:
+                service = service_objects[service_id]
+                service_attrs = getattr(service, "attrs", {}) or {}
+                service_spec = service_attrs.get("Spec", {}) or {}
+                service_mode = service_spec.get("Mode", {}) or {}
+                replicated = service_mode.get("Replicated", {}) or {}
+                replicas = replicated.get("Replicas")
+                if replicas == 0:
+                    per_service_states.append("stopped")
+                    continue
+
                 service_tasks = tasks_by_service.get(service_id, [])
                 desired_running = [
                     task for task in service_tasks
@@ -295,7 +308,10 @@ class DockerUtils:
                 ]
 
                 if not task_states:
-                    per_service_states.append("starting")
+                    # A new service can briefly exist before Swarm creates its
+                    # first task. If tasks exist but none is desired-running,
+                    # don't guess whether the service is starting or failed.
+                    per_service_states.append("starting" if not service_tasks else "unknown")
                 elif any(state in failure_states for state in task_states):
                     if any(state == "running" for state in task_states):
                         per_service_states.append("degraded")
@@ -312,19 +328,23 @@ class DockerUtils:
             any_starting = any(state == "starting" for state in per_service_states)
             any_degraded = any(state == "degraded" for state in per_service_states)
             any_error = any(state == "error" for state in per_service_states)
+            any_stopped = any(state == "stopped" for state in per_service_states)
             any_unknown = any(state == "unknown" for state in per_service_states)
             has_missing_services = found < expected
 
             if any_unknown:
                 state = "unknown"
-                detail = "At least one Swarm service did not return a recognizable task state."
-            elif any_error or any_degraded:
+                detail = "At least one Swarm service has no current desired-running task, so its state cannot be confirmed."
+            elif per_service_states and all(item == "stopped" for item in per_service_states) and not has_missing_services:
+                state = "stopped"
+                detail = "All observed Swarm services are configured with zero desired replicas."
+            elif any_error or any_degraded or any_stopped:
                 state = (
                     "degraded"
-                    if any_running or any_starting or any_degraded or has_missing_services
+                    if any_running or any_starting or any_degraded or any_stopped
                     else "error"
                 )
-                detail = "One or more Swarm services have failed tasks or are not yet available."
+                detail = "One or more Swarm services have failed tasks, are stopped, or are not yet available."
             elif has_missing_services and not any_starting:
                 state = "degraded"
                 detail = (

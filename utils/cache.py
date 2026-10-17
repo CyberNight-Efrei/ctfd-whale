@@ -114,38 +114,57 @@ class CacheProvider:
             )
 
     def get_available_port(self):
-        # Reconcile after every allocation. This lets the pool recover ports whose
-        # temporary lease expired after a worker crashed before persisting a mapping.
-        port = self.provider.get_available_port()
+        # Reconcile *before* popping: old/stale pool members must never be handed
+        # out before persisted DB ownership has been checked under the Redis lock.
         try:
             self._reconcile_public_ports()
         except Exception as exc:
             warnings.warn(
-                f"[CTFd-Whale] Unable to reconcile the public port pool: {exc}",
+                f"[CTFd-Whale] Unable to safely reconcile the public port pool: {exc}",
                 RuntimeWarning,
             )
+            return None
+
+        port = self.provider.get_available_port()
         if port is not None:
             return port
-        # The first call can report empty while an expired reservation still needs
-        # reconciliation. Retry once after rebuilding the pool from DB ownership.
+
+        # A concurrent allocator may have taken the final free port after our
+        # reconciliation. Refresh once more; active leases are excluded atomically.
+        try:
+            self._reconcile_public_ports()
+        except Exception as exc:
+            warnings.warn(
+                f"[CTFd-Whale] Unable to refresh the public port pool: {exc}",
+                RuntimeWarning,
+            )
+            return None
         return self.provider.get_available_port()
 
     def get_available_network_range(self):
-        # Same recovery for abandoned temporary subnet reservations. A newly popped
-        # subnet stays protected by its reservation while Docker is being queried.
-        subnet = self.provider.get_available_network_range()
+        # Never hand out a subnet from a stale pool before checking Swarm ownership.
+        # Reconciliation also recovers leases abandoned by workers that crashed.
         try:
             self._reconcile_network_pool()
         except Exception as exc:
             warnings.warn(
-                f"[CTFd-Whale] Unable to reconcile Docker network subnets: {exc}",
+                f"[CTFd-Whale] Unable to safely reconcile Docker network subnets: {exc}",
                 RuntimeWarning,
             )
+            return None
+
+        subnet = self.provider.get_available_network_range()
         if subnet is not None:
             return subnet
+
+        # Another request may have taken the last subnet after reconciliation.
         try:
             self._reconcile_network_pool()
-        except Exception:
+        except Exception as exc:
+            warnings.warn(
+                f"[CTFd-Whale] Unable to refresh Docker network subnets: {exc}",
+                RuntimeWarning,
+            )
             return None
         return self.provider.get_available_network_range()
 

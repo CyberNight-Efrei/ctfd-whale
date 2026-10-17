@@ -14,7 +14,7 @@ class TrpRouter(BaseRouter):
         self.ses = session()
         self.url = get_config('whale:trp_api_url', '').rstrip("/")
         self.common = ''
-        for container in DBContainer.get_routable_containers():
+        for container in DBContainer.get_routable_containers(include_starting=False):
             self.register(container)
 
     @staticmethod

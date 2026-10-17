@@ -394,3 +394,100 @@
     font-family: var(--font-monospace, monospace);
     font-size: .78rem;
 }
+
+/* Read-only Docker Swarm status indicators */
+.whale-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    max-width: 100%;
+    padding: .32rem .55rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    font-size: .78rem;
+    font-weight: 650;
+    line-height: 1.2;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.whale-status-dot {
+    display: inline-block;
+    width: .48rem;
+    height: .48rem;
+    flex: 0 0 .48rem;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.whale-status-running {
+    color: #217a43;
+    background: rgba(40, 167, 69, .11);
+    border-color: rgba(40, 167, 69, .28);
+}
+
+.whale-status-starting {
+    color: #176b9b;
+    background: rgba(23, 162, 184, .11);
+    border-color: rgba(23, 162, 184, .28);
+}
+
+.whale-status-degraded {
+    color: #876414;
+    background: rgba(255, 193, 7, .15);
+    border-color: rgba(200, 150, 0, .35);
+}
+
+.whale-status-error,
+.whale-status-missing {
+    color: #a52b35;
+    background: rgba(220, 53, 69, .1);
+    border-color: rgba(220, 53, 69, .28);
+}
+
+.whale-status-unknown {
+    color: #626a71;
+    background: rgba(108, 117, 125, .1);
+    border-color: rgba(108, 117, 125, .27);
+}
+
+.whale-status-detail {
+    display: block;
+    margin-top: .3rem;
+    color: var(--muted, #6c757d);
+    font-size: .76rem;
+    white-space: nowrap;
+}
+
+.whale-status-context {
+    display: block;
+    margin-top: .25rem;
+    color: var(--muted, #6c757d);
+    font-size: .76rem;
+}
+
+.whale-instance-card-status {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: .25rem .5rem;
+    margin-top: -.15rem;
+    padding-bottom: .65rem;
+    border-bottom: 1px solid rgba(127, 127, 127, .18);
+}
+
+.whale-instance-summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .45rem;
+}
+
+.whale-instance-table .whale-status-col {
+    min-width: 135px;
+    white-space: nowrap;
+}
+
+.whale-instance-table .whale-status-col .whale-status-detail {
+    font-size: .72rem;
+}

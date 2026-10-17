@@ -57,7 +57,7 @@
                                 {% endfor %}
                             </div>
                         {% endif %}
-                        <button type="button" class="btn btn-sm btn-outline-secondary click-copy" data-copy="{{ container.user_access }}" title="Copy access details">
+                        <button type="button" class="btn btn-sm btn-outline-secondary click-copy" data-copy-html="{{ access_details[container.id] }}" title="Copy access details">
                             <i class="fas fa-terminal mr-1" aria-hidden="true"></i>Copy access
                         </button>
                     </td>

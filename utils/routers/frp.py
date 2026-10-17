@@ -173,10 +173,16 @@ class FrpRouter(BaseRouter):
                 '<th>Key</th><th>Value</th></tr>' + "".join(detail_rows) + "</table>"
                 if detail_rows else ""
             )
-            + "</div><style>.click-copy{cursor:pointer}.click-copy:hover{filter:brightness(50%)}</style>"
+            + "</div>"
+            + "<style>.click-copy{cursor:pointer}.click-copy:hover{filter:brightness(50%)}</style>"
             + "<script>(function(){document.querySelectorAll('.click-copy').forEach(function(el){"
               "if(!el.dataset.whaleCopyBound){el.dataset.whaleCopyBound='1';el.addEventListener('click',function(){"
-              "navigator.clipboard.writeText(el.textContent);});}});})();</script>"
+              "navigator.clipboard.writeText(el.textContent).then(function(){"
+              "CTFd._functions.events.eventAlert({title:'Success',"
+              "html:'Content has been copied to your clipboard.',button:'OK'});"
+              "}).catch(function(){CTFd._functions.events.eventAlert({title:'Copy failed',"
+              "html:'Unable to copy to clipboard. Check browser permissions or use HTTPS.',button:'OK'});});"
+              "});}});})();</script>"
         )
 
     def register(self, container: WhaleContainer):

@@ -8,6 +8,13 @@ function htmlToPlainText(markup) {
     const wrapper = document.createElement("div");
     wrapper.innerHTML = String(markup || "");
     wrapper.querySelectorAll("script, style").forEach((element) => element.remove());
+    wrapper.querySelectorAll("a[href]").forEach((link) => {
+        const href = link.getAttribute("href");
+        const label = link.textContent.trim();
+        if (href && label && /^https?:\\/\\//i.test(href) && !label.includes(href)) {
+            link.textContent = label + " (" + href + ")";
+        }
+    });
     wrapper.querySelectorAll("br, hr").forEach((element) => {
         element.insertAdjacentText("beforebegin", "\n");
         element.remove();

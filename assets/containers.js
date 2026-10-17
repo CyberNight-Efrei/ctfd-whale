@@ -12,7 +12,7 @@ function htmlToPlainText(markup) {
         element.insertAdjacentText("beforebegin", "\n");
         element.remove();
     });
-    wrapper.querySelectorAll("td, th").forEach((element) => {
+    wrapper.querySelectorAll("td:not(:last-child), th:not(:last-child)").forEach((element) => {
         element.insertAdjacentText("afterend", " — ");
     });
     wrapper.querySelectorAll("li, tr, p, h1, h2, h3, h4, h5, h6").forEach((element) => {

@@ -11,7 +11,7 @@ function htmlToPlainText(markup) {
     wrapper.querySelectorAll("a[href]").forEach((link) => {
         const href = link.getAttribute("href");
         const label = link.textContent.trim();
-        if (href && label && /^https?:\\/\\//i.test(href) && !label.includes(href)) {
+        if (href && label && (href.startsWith("http://") || href.startsWith("https://")) && !label.includes(href)) {
             link.textContent = label + " (" + href + ")";
         }
     });

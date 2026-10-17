@@ -7,11 +7,12 @@ import ipaddress
 import warnings
 
 from CTFd.cache import cache
+from CTFd.models import db
 from CTFd.utils import get_config
 from flask_redis import FlaskRedis
 from redis.exceptions import LockError
 
-from .db import DBContainer
+from ..models import WhaleContainerPort
 
 
 PORT_POOL_KEY = "ctfd_whale-port-set"
@@ -49,12 +50,7 @@ class CacheProvider:
         # avoids a stale DB snapshot reintroducing a port just allocated elsewhere.
         self.provider.reconcile_port_pool(
             set(range(min_port, max_port + 1)),
-            lambda: {
-                int(mapping.public_port)
-                for container in DBContainer.get_all_container()
-                for mapping in container.port_mappings
-                if mapping.public_port is not None
-            },
+            self._used_public_ports_from_db,
         )
 
         # A Docker API outage must not prevent the direct port pool from being
@@ -98,16 +94,25 @@ class CacheProvider:
                 RuntimeWarning,
             )
 
+    @staticmethod
+    def _used_public_ports_from_db():
+        rows = (
+            db.session.query(WhaleContainerPort.public_port)
+            .filter(WhaleContainerPort.public_port.isnot(None))
+            .all()
+        )
+        return {int(row[0]) for row in rows}
+
     def add_available_port(self, port):
         """Return a port only when no persisted instance currently owns it."""
         port = int(port)
-        for container in DBContainer.get_all_container():
-            if any(
-                mapping.public_port is not None
-                and int(mapping.public_port) == port
-                for mapping in container.port_mappings
-            ):
-                return False
+        if (
+            db.session.query(WhaleContainerPort.id)
+            .filter(WhaleContainerPort.public_port == port)
+            .first()
+            is not None
+        ):
+            return False
         return self.provider.add_available_port(port)
 
     def __getattr__(self, name):

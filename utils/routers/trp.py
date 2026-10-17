@@ -50,7 +50,9 @@ class TrpRouter(BaseRouter):
 
     def unregister(self, container: WhaleContainer):
         try:
-            resp = self.ses.delete(f'{self.url}/rule/{self.get_domain(container)}')
+            resp = self.ses.delete(
+                f'{self.url}/rule/{self.get_domain(container)}', timeout=5
+            )
             resp.raise_for_status()
             return True, 'success'
         except HTTPError as e:
@@ -65,7 +67,7 @@ class TrpRouter(BaseRouter):
 
     def check_availability(self):
         try:
-            resp = self.ses.get(f'{self.url}/rules').json()
+            resp = self.ses.get(f'{self.url}/rules', timeout=2).json()
         except RequestException as e:
             return False, 'Unable to access trp admin api'
         except Exception as e:

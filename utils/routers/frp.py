@@ -89,13 +89,26 @@ class FrpRouter(BaseRouter):
                     self.common = common
                 else:
                     remote = self.ses.get(f"{self.url}/api/config", timeout=5)
-                    assert remote.status_code == 200
+                    if remote.status_code != 200:
+                        raise RequestException(
+                            f"FRP config endpoint returned HTTP {remote.status_code}"
+                        )
                     set_config("whale:frp_config_template", remote.text)
                     self.common = remote.text
             config = self.common + "\n" + "\n".join(str(rule) for rule in rules)
-            assert self.ses.put(f"{self.url}/api/config", config, timeout=5).status_code == 200
-            assert self.ses.get(f"{self.url}/api/reload", timeout=5).status_code == 200
-        except (RequestException, AssertionError) as exc:
+            update_response = self.ses.put(
+                f"{self.url}/api/config", config, timeout=5
+            )
+            if update_response.status_code != 200:
+                raise RequestException(
+                    f"FRP config update returned HTTP {update_response.status_code}"
+                )
+            reload_response = self.ses.get(f"{self.url}/api/reload", timeout=5)
+            if reload_response.status_code != 200:
+                raise RequestException(
+                    f"FRP reload returned HTTP {reload_response.status_code}"
+                )
+        except RequestException as exc:
             raise WhaleError(
                 "\nfrpc request failed\n"
                 + (f"{exc}\n" if str(exc) else "")
@@ -316,4 +329,6 @@ class FrpRouter(BaseRouter):
             return False, "Unable to access frpc admin api"
         if response.status_code == 401:
             return False, "frpc admin api unauthorized"
+        if not 200 <= response.status_code < 300:
+            return False, f"frpc admin api returned HTTP {response.status_code}"
         return True, "Available"

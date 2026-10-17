@@ -1,144 +1,152 @@
 {% extends "admin/challenges/create.html" %}
 
 {% block header %}
-    <div class="alert alert-secondary" role="alert">
-        Dynamic docker challenge allows players to deploy their per-challenge standalone instances.
-    </div>
+<div class="alert alert-secondary" role="alert">
+    Dynamic Docker challenges launch an isolated instance per player and can expose several ports.
+</div>
 {% endblock %}
 
-
 {% block value %}
-    <div class="form-group">
-        <label for="value">Docker Image<br>
-            <small class="form-text text-muted">
-                The docker image used to deploy
-            </small>
-        </label>
-        <input type="text" class="form-control" name="docker_image" placeholder="Enter docker image name" required>
-    </div>
-    <div class="form-group">
-        <label for="value">Frp Redirect Type<br>
-            <small class="form-text text-muted">
-                Decide the redirect type how frp redirect traffic
-            </small>
-        </label>
-        <select class="form-control" name="redirect_type" id="redirect_type">
-            <option value="http" selected>HTTP</option>
-            <option value="ssh">SSH</option>
-            <option value="tcp">Direct (TCP)</option>
-        </select>
-    </div>
-    
-    <div id="login_forms" style="display: none;">
-        <div class="form-group login_form">
-            <label for="user">User<br>
-                <small class="form-text text-muted">
-                    Enter the login User
-                </small>
-            </label>
-            <input type="text" class="form-control login_form" id="user" name="user" placeholder="Enter login User">
-        </div>
+<div class="form-group">
+    <label for="docker_image">Docker Image<br>
+        <small class="form-text text-muted">The image used to deploy the challenge.</small>
+    </label>
+    <input type="text" class="form-control" id="docker_image" name="docker_image" placeholder="Enter Docker image name" required>
+</div>
 
-        <div class="form-group login_form">
-            <label for="password">Password<br>
-                <small class="form-text text-muted">
-                    Enter the login Password
-                </small>
-            </label>
-            <input type="text" class="form-control login_form" id="password" name="password" placeholder="Enter login Password">
-        </div>
+<div class="form-group">
+    <label>Exposed ports<br>
+        <small class="form-text text-muted">Add every internal service port that players must reach. TCP/SSH ports receive an allocated public port; HTTP ports receive an FRP subdomain.</small>
+    </label>
+    <input type="hidden" name="ports_json" id="ports_json" value="[]">
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered">
+            <thead><tr><th>Name</th><th>Protocol</th><th>Internal port</th><th></th></tr></thead>
+            <tbody id="whale-ports-body"></tbody>
+        </table>
     </div>
-    <div class="form-group">
-        <label for="value">Frp Redirect Port<br>
-            <small class="form-text text-muted">
-                Decide which port in the instance that frp should redirect traffic for
-            </small>
-        </label>
-        <input type="number" class="form-control" name="redirect_port" placeholder="Enter the port you want to open"
-               required>
-    </div>
-    <div class="form-group">
-        <label for="value">Docker Container Memory Limit<br>
-            <small class="form-text text-muted">
-                The memory usage limit
-            </small>
-        </label>
-        <input type="text" class="form-control" name="memory_limit" placeholder="Enter the memory limit" value="128m"
-               required>
-    </div>
-    <div class="form-group">
-        <label for="value">Docker Container CPU Limit<br>
-            <small class="form-text text-muted">
-                The CPU usage limit
-            </small>
-        </label>
-        <input type="number" class="form-control" name="cpu_limit" placeholder="Enter the cpu limit" value="0.5"
-               required>
-    </div>
-    <div class="form-group">
-        <label for="value">Initial Value<br>
-            <small class="form-text text-muted">
-                This is how many points the challenge is worth initially.
-            </small>
-        </label>
-        <input type="number" class="form-control" name="value" placeholder="Enter value" required>
-    </div>
+    <button type="button" class="btn btn-sm btn-secondary" id="whale-add-port">Add a port</button>
+    <small class="form-text text-muted">Port names must be unique and use lowercase letters, digits, underscores or hyphens. Maximum: 20 ports.</small>
+</div>
 
+<div id="whale-ssh-fields" style="display:none;">
     <div class="form-group">
-        <label for="value">Decay Limit<br>
-            <small class="form-text text-muted">
-                The amount of solves before the challenge reaches its minimum value
-            </small>
-        </label>
-        <input type="number" class="form-control" name="decay" placeholder="Enter decay limit" required>
+        <label for="user">SSH login user</label>
+        <input type="text" class="form-control" id="user" name="user" placeholder="Login user">
     </div>
-
     <div class="form-group">
-        <label for="value">Minimum Value<br>
-            <small class="form-text text-muted">
-                This is the lowest that the challenge can be worth
-            </small>
-        </label>
-        <input type="number" class="form-control" name="minimum" placeholder="Enter minimum value" required>
+        <label for="password">SSH login password</label>
+        <input type="text" class="form-control" id="password" name="password" placeholder="Login password">
     </div>
+    <small class="form-text text-muted">These credentials are displayed for every SSH port in this challenge.</small>
+</div>
 
-    <div class="form-group">
-        <label for="value">Score Type<br>
-            <small class="form-text text-muted">
-                Decide it use dynamic score or not
-            </small>
-        </label>
+<div class="form-group">
+    <label for="memory_limit">Docker Container Memory Limit</label>
+    <input type="text" class="form-control" id="memory_limit" name="memory_limit" placeholder="128m" value="128m" required>
+</div>
+<div class="form-group">
+    <label for="cpu_limit">Docker Container CPU Limit</label>
+    <input type="number" step="any" class="form-control" id="cpu_limit" name="cpu_limit" placeholder="0.5" value="0.5" required>
+</div>
+<div class="form-group">
+    <label for="value">Initial Value</label>
+    <input type="number" class="form-control" name="value" placeholder="Enter value" required>
+</div>
+<div class="form-group">
+    <label for="decay">Decay Limit</label>
+    <input type="number" class="form-control" name="decay" placeholder="Enter decay limit" required>
+</div>
+<div class="form-group">
+    <label for="minimum">Minimum Value</label>
+    <input type="number" class="form-control" name="minimum" placeholder="Enter minimum value" required>
+</div>
+<div class="form-group">
+    <label for="dynamic_score">Score Type</label>
+    <select class="form-control" name="dynamic_score" id="dynamic_score">
+        <option value="0" selected>Static Score</option>
+        <option value="1">Dynamic Score</option>
+    </select>
+</div>
 
-        <select class="form-control" name="dynamic_score">
-            <option value="0" selected>Static Score</option>
-            <option value="1">Dynamic Score</option>
-        </select>
-    </div>
+<script>
+(function () {
+    function initWhalePortEditor() {
+        var body = document.getElementById('whale-ports-body');
+        var hidden = document.getElementById('ports_json');
+        var addButton = document.getElementById('whale-add-port');
+        var sshFields = document.getElementById('whale-ssh-fields');
+        if (!body || !hidden || !addButton || body.dataset.initialized === '1') return;
+        body.dataset.initialized = '1';
 
-    <script defer>
-    const redirect_type_select = document.getElementById('redirect_type');
-    const login_form = document.getElementById('login_forms');
-    const login_inputs = document.querySelectorAll('.login_form');
-    
-    function toggleSSH() {
-        if (redirect_type_select.value === 'ssh') {
-            login_form.style.display = 'block';
-            login_inputs.forEach((el) => el.required = true);
-        } else {
-            login_form.style.display = 'none';
-            login_inputs.forEach((el) => {
-                el.required = false;
-                el.value = '';
+        function readRows() {
+            return Array.from(body.querySelectorAll('tr')).map(function (row) {
+                return {
+                    name: row.querySelector('[data-port-name]').value.trim(),
+                    protocol: row.querySelector('[data-port-protocol]').value,
+                    internal_port: row.querySelector('[data-port-number]').value
+                };
             });
         }
+        function sync() {
+            hidden.value = JSON.stringify(readRows());
+            var hasSsh = readRows().some(function (port) { return port.protocol === 'ssh'; });
+            sshFields.style.display = hasSsh ? 'block' : 'none';
+            sshFields.querySelectorAll('input').forEach(function (input) { input.required = hasSsh; });
+        }
+        function addRow(port) {
+            if (body.querySelectorAll('tr').length >= 20) return;
+            var row = document.createElement('tr');
+            var nameCell = document.createElement('td');
+            var name = document.createElement('input');
+            name.className = 'form-control form-control-sm'; name.required = true;
+            name.maxLength = 32; name.pattern = '[a-zA-Z0-9][a-zA-Z0-9_-]{0,31}';
+            name.setAttribute('data-port-name', ''); name.value = port.name || '';
+            nameCell.appendChild(name);
+
+            var protocolCell = document.createElement('td');
+            var protocol = document.createElement('select'); protocol.className = 'form-control form-control-sm';
+            protocol.setAttribute('data-port-protocol', '');
+            [['http','HTTP'],['tcp','TCP'],['ssh','SSH']].forEach(function (item) {
+                var option = document.createElement('option'); option.value = item[0]; option.textContent = item[1];
+                protocol.appendChild(option);
+            });
+            protocol.value = port.protocol || 'http'; protocolCell.appendChild(protocol);
+
+            var numberCell = document.createElement('td');
+            var number = document.createElement('input'); number.type = 'number'; number.min = '1'; number.max = '65535';
+            number.required = true; number.className = 'form-control form-control-sm';
+            number.setAttribute('data-port-number', ''); number.value = port.internal_port || 80;
+            numberCell.appendChild(number);
+
+            var actionCell = document.createElement('td');
+            var remove = document.createElement('button'); remove.type = 'button'; remove.className = 'btn btn-sm btn-outline-danger';
+            remove.textContent = 'Remove';
+            remove.addEventListener('click', function () {
+                if (body.querySelectorAll('tr').length === 1) {
+                    name.value = ''; number.value = ''; protocol.value = 'http';
+                } else row.remove();
+                sync();
+            });
+            actionCell.appendChild(remove);
+            row.append(nameCell, protocolCell, numberCell, actionCell); body.appendChild(row);
+            row.addEventListener('input', sync); row.addEventListener('change', sync); sync();
+        }
+
+        addButton.addEventListener('click', function () { addRow({name:'', protocol:'http', internal_port:80}); });
+        var existing = [];
+        try { existing = JSON.parse(hidden.value || '[]'); } catch (error) { existing = []; }
+        if (!Array.isArray(existing) || existing.length === 0) existing = [{name:'web', protocol:'http', internal_port:80}];
+        existing.forEach(addRow);
+        sync();
     }
-    
-    toggleSSH();
-    
-    redirect_type_select.addEventListener('change', toggleSSH);
-    </script>
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initWhalePortEditor);
+    else initWhalePortEditor();
+    if (window.jQuery) jQuery(document).on('shown.bs.modal', initWhalePortEditor);
+})();
+</script>
 {% endblock %}
 
 {% block type %}
-    <input type="hidden" value="dynamic_docker" name="type" id="chaltype">
+<input type="hidden" value="dynamic_docker" name="type" id="chaltype">
 {% endblock %}

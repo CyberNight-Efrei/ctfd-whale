@@ -1,3 +1,5 @@
+import html
+import re
 import warnings
 
 from flask import current_app
@@ -15,189 +17,228 @@ from ...models import WhaleContainer
 
 class FrpRouter(BaseRouter):
     name = "frp"
-    types = {
-        'tcp': 'tcp',
-        'ssh': 'tcp',
-        'http': 'http',
-    }
+    types = {"tcp": "tcp", "ssh": "tcp", "http": "http"}
 
     class FrpRule:
         def __init__(self, name, config):
             self.name = name
             self.config = config
 
-        def __str__(self) -> str:
-            return f'[{self.name}]\n' + '\n'.join(f'{k} = {v}' for k, v in self.config.items())
+        def __str__(self):
+            return f'[{self.name}]\n' + "\n".join(
+                f"{key} = {value}" for key, value in self.config.items()
+            )
 
     def __init__(self):
         super().__init__()
         self.ses = session()
-        self.url = get_config("whale:frp_api_url").rstrip("/")
-        self.common = ''
+        self.url = get_config("whale:frp_api_url", "").rstrip("/")
+        self.common = ""
         try:
             CacheProvider(app=current_app).init_port_sets()
         except Exception:
-            warnings.warn(
-                "cache initialization failed",
-                WhaleWarning
+            warnings.warn("cache initialization failed", WhaleWarning)
+
+    @staticmethod
+    def _safe_rule_name(value):
+        return re.sub(r"[^A-Za-z0-9_-]", "_", str(value))
+
+    @staticmethod
+    def _http_subdomain(container, port_mapping, http_count):
+        base = container.http_subdomain
+        if http_count > 1:
+            return f"{base}-{port_mapping.name}"
+        return base
+
+    def _rules_for_container(self, container):
+        mappings = list(container.port_mappings)
+        http_count = sum(1 for mapping in mappings if mapping.protocol == "http")
+        rules = []
+        for mapping in mappings:
+            rule_name = self._safe_rule_name(
+                f"{mapping.protocol}_{container.user_id}_{container.uuid}_{mapping.name}"
             )
+            config = {
+                "type": self.types[mapping.protocol],
+                "local_ip": f"{container.user_id}-{container.uuid}",
+                "local_port": mapping.internal_port,
+                "use_compression": "true",
+            }
+            if mapping.protocol == "http":
+                config["subdomain"] = self._http_subdomain(container, mapping, http_count)
+            else:
+                if not mapping.public_port:
+                    raise WhaleError(
+                        f"No public port has been allocated for challenge port '{mapping.name}'."
+                    )
+                config["remote_port"] = mapping.public_port
+            rules.append(self.FrpRule(rule_name, config))
+        return rules
 
     def reload(self, exclude=None):
         rules = []
         for container in DBContainer.get_all_alive_container():
             if container.uuid == exclude:
                 continue
-            name = f'{container.challenge.redirect_type}_{container.user_id}_{container.uuid}'
-            config = {
-                'type': self.types[container.challenge.redirect_type],
-                'local_ip': f'{container.user_id}-{container.uuid}',
-                'local_port': container.challenge.redirect_port,
-                'use_compression': 'true',
-            }
-            if config['type'] == 'http':
-                config['subdomain'] = container.http_subdomain
-            elif config['type'] == 'tcp':
-                config['remote_port'] = container.port
-            rules.append(self.FrpRule(name, config))
+            rules.extend(self._rules_for_container(container))
 
         try:
             if not self.common:
-                common = get_config("whale:frp_config_template", '')
-                if '[common]' in common:
+                common = get_config("whale:frp_config_template", "")
+                if "[common]" in common:
                     self.common = common
                 else:
-                    remote = self.ses.get(f'{self.url}/api/config')
+                    remote = self.ses.get(f"{self.url}/api/config", timeout=5)
                     assert remote.status_code == 200
                     set_config("whale:frp_config_template", remote.text)
                     self.common = remote.text
-            config = self.common + '\n' + '\n'.join(str(r) for r in rules)
-            assert self.ses.put(
-                f'{self.url}/api/config', config, timeout=5
-            ).status_code == 200
-            assert self.ses.get(
-                f'{self.url}/api/reload', timeout=5
-            ).status_code == 200
-        except (RequestException, AssertionError) as e:
+            config = self.common + "\n" + "\n".join(str(rule) for rule in rules)
+            assert self.ses.put(f"{self.url}/api/config", config, timeout=5).status_code == 200
+            assert self.ses.get(f"{self.url}/api/reload", timeout=5).status_code == 200
+        except (RequestException, AssertionError) as exc:
             raise WhaleError(
-                '\nfrpc request failed\n' +
-                (f'{e}\n' if str(e) else '') +
-                'please check the frp related configs'
+                "\nfrpc request failed\n"
+                + (f"{exc}\n" if str(exc) else "")
+                + "please check the frp related configs"
             ) from None
 
     def access(self, container: WhaleContainer):
-        code    = ''
-        host    = ''
-        port    = ''
-        if container.challenge.redirect_type == 'tcp':
-            host = get_config("whale:frp_direct_ip_address", "")
-            port = container.port
-            code = f'<code class="click-copy fs-5">nc { host } { port }</code>'
-        elif container.challenge.redirect_type == 'http':
-            port = get_config("whale:frp_http_port", "80")
-            host = f'{ container.http_subdomain }.{ get_config("whale:frp_http_domain_suffix", "") }:{ port }'
-            code = f'<a class="fs-5" target="_blank" href="http://{ host }/">Link to the Challenge 🚀</a>'
-        elif container.challenge.redirect_type == 'ssh':
-            host = get_config("whale:frp_direct_ip_address", "")
-            port = container.port
-            code = f'<code class="click-copy fs-5">ssh { container.challenge.user }@{ host } -p { port }</code>'
+        mappings = list(container.port_mappings)
+        if not mappings:
+            return "<p>No ports are configured for this instance.</p>"
+        http_count = sum(1 for mapping in mappings if mapping.protocol == "http")
+        host = get_config("whale:frp_direct_ip_address", "")
+        http_port = str(get_config("whale:frp_http_port", "80"))
+        domain_suffix = get_config("whale:frp_http_domain_suffix", "")
+        safe_host = html.escape(str(host))
+        rows = []
+        cards = []
+
+        for mapping in mappings:
+            name = html.escape(mapping.name)
+            if mapping.protocol == "http":
+                subdomain = self._http_subdomain(container, mapping, http_count)
+                public_host = f"{subdomain}.{domain_suffix}"
+                if http_port and http_port != "80":
+                    href = f"http://{public_host}:{http_port}/"
+                    host_display = f"{public_host}:{http_port}"
+                else:
+                    href = f"http://{public_host}/"
+                    host_display = public_host
+                cards.append(
+                    f'<li><strong>{name}</strong> — '
+                    f'<a target="_blank" rel="noopener noreferrer" href="{html.escape(href, quote=True)}">'
+                    f'{html.escape(host_display)}</a> (HTTP, internal port {mapping.internal_port})</li>'
+                )
+                rows.append((name, "HTTP", str(mapping.internal_port), host_display))
+            elif mapping.protocol == "ssh":
+                public_port = mapping.public_port
+                user = html.escape(str(container.challenge.user or "user"))
+                command = f"ssh {container.challenge.user or 'user'}@{host} -p {public_port}"
+                safe_command = html.escape(command)
+                cards.append(
+                    f'<li><strong>{name}</strong> — <code class="click-copy">{safe_command}</code>'
+                    f' (SSH, internal port {mapping.internal_port})</li>'
+                )
+                rows.append((name, "SSH", str(mapping.internal_port), str(public_port or "")))
+            else:
+                public_port = mapping.public_port
+                command = f"nc {host} {public_port}"
+                safe_command = html.escape(command)
+                cards.append(
+                    f'<li><strong>{name}</strong> — <code class="click-copy">{safe_command}</code>'
+                    f' (TCP, internal port {mapping.internal_port})</li>'
+                )
+                rows.append((name, "TCP", str(mapping.internal_port), str(public_port or "")))
 
         challenge_data = {
-            'User': container.challenge.user,
-            'Password': container.challenge.password,
-            'Host': host,
-            'Port': port
+            "User": container.challenge.user,
+            "Password": container.challenge.password,
+            "Direct host": host,
         }
+        detail_rows = []
+        for key, value in challenge_data.items():
+            if value is not None and str(value).strip():
+                detail_rows.append(
+                    f"<tr><td>{html.escape(key)}</td><td><code class=\"click-copy\">"
+                    f"{html.escape(str(value))}</code></td></tr>"
+                )
 
-        is_valid = lambda v: not (
-            v is None
-            or (isinstance(v, str) and not v.strip())
+        return (
+            '<div class="whale-port-access"><h6>Available services</h6><ul>'
+            + "".join(cards)
+            + "</ul>"
+            + (
+                '<hr><table class="table table-bordered table-sm"><tr>'
+                '<th>Key</th><th>Value</th></tr>' + "".join(detail_rows) + "</table>"
+                if detail_rows else ""
+            )
+            + "</div><style>.click-copy{cursor:pointer}.click-copy:hover{filter:brightness(50%)}</style>"
+            + "<script>(function(){document.querySelectorAll('.click-copy').forEach(function(el){"
+              "if(!el.dataset.whaleCopyBound){el.dataset.whaleCopyBound='1';el.addEventListener('click',function(){"
+              "navigator.clipboard.writeText(el.textContent);});}});})();</script>"
         )
 
-        table = ''
-        for key, value in challenge_data.items():
-            if not is_valid(value):
-                continue
-
-            table += f'''<tr>
-                    <td>{ key }</td>
-                    <td><code class="click-copy">{ value }</code></td>
-                </tr>
-            '''
-
-        html = f'''{ code }
-            <hr>
-            <table class="table table-bordered table-sm">
-                <tr>
-                    <th>Key</th>
-                    <th>Value</th>
-                </tr>
-                { table }
-            </table>
-        '''
-
-        css = '''
-        <style>
-            code {
-                cursor: pointer;
-            }
-            code:hover {
-                filter: brightness(50%);
-            }
-        </style>
-        '''
-
-        js = '''
-        <script defer>
-        function copyToClipboard(event, str) {
-            CTFd._functions.events.eventAlert({
-                title: "Success",
-                html: "Content has been copied to your clipboard.",
-                button: "OK"
-            });
-            navigator.clipboard.writeText(str);
-        }
-
-        document.querySelectorAll(".click-copy").forEach((el) => { if (!el.onclick) el.onclick = function (e) {
-            copyToClipboard(e, el.textContent);
-        } })
-        </script>
-        '''
-        return html + css + js
-
     def register(self, container: WhaleContainer):
-        if container.challenge.redirect_type in ('tcp', 'ssh'):
-            if not container.port:
-                port = CacheProvider(app=current_app).get_available_port()
-                if not port:
-                    return False, 'No available ports. Please wait for a few minutes.'
-                container.port = port
-                db.session.commit()
-        elif container.challenge.redirect_type == 'http':
-            # config['subdomain'] = container.http_subdomain
-            pass
-        self.reload()
-        return True, 'success'
+        mappings = list(container.port_mappings)
+        if not mappings:
+            return False, "No ports are configured for this challenge."
+
+        cache = CacheProvider(app=current_app)
+        allocated = []
+        try:
+            for mapping in mappings:
+                if mapping.protocol in ("tcp", "ssh") and not mapping.public_port:
+                    port = cache.get_available_port()
+                    if not port:
+                        for allocated_port in allocated:
+                            cache.add_available_port(allocated_port)
+                        return False, "No available public ports. Please wait or increase the FRP port range."
+                    mapping.public_port = int(port)
+                    allocated.append(int(port))
+            db.session.commit()
+            self.reload()
+            return True, "success"
+        except Exception as exc:
+            db.session.rollback()
+            # Remove any partially applied FRP entries before returning their ports.
+            try:
+                self.reload(exclude=container.uuid)
+            except Exception:
+                pass
+            for mapping in container.port_mappings:
+                if mapping.public_port in allocated:
+                    mapping.public_port = None
+            db.session.commit()
+            for allocated_port in allocated:
+                cache.add_available_port(allocated_port)
+            logging.log(
+                "whale", "Error registering multi-port FRP routes",
+                name=container.user.name if container.user else str(container.user_id),
+                challenge_id=container.challenge_id,
+            )
+            return False, f"Unable to register FRP routes: {exc}"
 
     def unregister(self, container: WhaleContainer):
-        if container.challenge.redirect_type in ('tcp', 'ssh'):
-            try:
-                redis_util = CacheProvider(app=current_app)
-                redis_util.add_available_port(container.port)
-            except Exception as e:
-                logging.log(
-                    'whale', 'Error deleting port from cache',
-                    name=container.user.name,
-                    challenge_id=container.challenge_id,
-                )
-                return False, 'Error deleting port from cache'
-        self.reload(exclude=container.uuid)
-        return True, 'success'
+        try:
+            # Reload first; only return ports to the pool once FRP no longer has routes.
+            self.reload(exclude=container.uuid)
+            # The controller releases allocated ports only after the Docker service
+            # has also been removed successfully.
+            return True, "success"
+        except Exception as exc:
+            logging.log(
+                "whale", "Error unregistering multi-port FRP routes",
+                name=container.user.name if container.user else str(container.user_id),
+                challenge_id=container.challenge_id,
+            )
+            return False, f"Unable to unregister FRP routes: {exc}"
 
     def check_availability(self):
         try:
-            resp = self.ses.get(f'{self.url}/api/status', timeout=2.0)
-        except RequestException as e:
-            return False, 'Unable to access frpc admin api'
-        if resp.status_code == 401:
-            return False, 'frpc admin api unauthorized'
-        return True, 'Available'
+            response = self.ses.get(f"{self.url}/api/status", timeout=2.0)
+        except RequestException:
+            return False, "Unable to access frpc admin api"
+        if response.status_code == 401:
+            return False, "frpc admin api unauthorized"
+        return True, "Available"

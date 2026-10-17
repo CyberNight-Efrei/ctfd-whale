@@ -11,6 +11,17 @@
                         <span class="badge badge-light border whale-instance-id">{{ container.renew_count }} renewal{{ '' if container.renew_count == 1 else 's' }}</span>
                     </header>
 
+                    {% set runtime_status = instance_statuses[container.id] %}
+                    <div class="whale-instance-card-status">
+                        <span class="whale-status-badge whale-status-{{ runtime_status.state }}" title="{{ runtime_status.detail }}" aria-label="Swarm status: {{ runtime_status.label }}">
+                            <span class="whale-status-dot" aria-hidden="true"></span>{{ runtime_status.label }}
+                        </span>
+                        {% if runtime_status.services_expected > 1 %}
+                            <small class="whale-status-detail">{{ runtime_status.services_found }}/{{ runtime_status.services_expected }} services</small>
+                        {% endif %}
+                        <small class="whale-status-context">Based on Docker Swarm task state, not application health.</small>
+                    </div>
+
                     <a class="btn btn-sm btn-outline-secondary whale-instance-card-user" href="{{ url_for('admin.users_detail', user_id=container.user.id) }}">
                         <i class="fas fa-user mr-1" aria-hidden="true"></i>{{ container.user.name }}
                     </a>

@@ -12,7 +12,7 @@ docker node update --label-add='name=linux-1' $(docker node ls -q)
 
 git clone https://github.com/CTFd/CTFd --depth=1
 git clone https://github.com/CyberNight-Efrei/ctfd-whale CTFd/CTFd/plugins/ctfd-whale --depth=1
-curl -fsSL https://cdn.jsdelivr.net/gh/frankli0324/ctfd-whale/docker-compose.example.yml -o CTFd/docker-compose.yml
+curl -fsSL https://cdn.jsdelivr.net/gh/CyberNight-Efrei/ctfd-whale/docker-compose.example.yml -o CTFd/docker-compose.yml
 
 # make sure you have pip3 installed on your rig
 pip3 install docker-compose

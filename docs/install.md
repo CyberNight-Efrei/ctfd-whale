@@ -201,6 +201,8 @@ The example Compose file already mounts `/var/run/docker.sock` into the CTFd con
 
 For a remote Docker host, use the Docker API over TLS with client certificate verification (normally port 2376) and set Whale's SSL certificate fields accordingly. Do not expose an unauthenticated, unencrypted Docker TCP endpoint such as `tcp://0.0.0.0:2375`.
 
+For production deployments, especially when CTFd runs more than one worker, configure a **shared Redis cache** (`CACHE_TYPE=redis` and a reachable `REDIS_URL`). Whale uses Redis to coordinate public-port and subnet allocation, and to serialize operations on each user's instance. The `simple` and filesystem cache backends are for development/testing only; they cannot coordinate those operations across processes or hosts.
+
 * map docker socket into CTFd container
 * Attach CTFd container to frp_connect
 

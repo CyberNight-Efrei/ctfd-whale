@@ -97,7 +97,7 @@ class UserContainers(Resource):
         existing_container = DBContainer.get_current_containers(user_id=user_id)
         if existing_container:
             removed, message = ControlUtil.try_remove_container(user_id)
-            if not removed:
+            if not removed and message != "No such container":
                 abort(
                     503,
                     "The previous instance could not be cleaned up safely. "

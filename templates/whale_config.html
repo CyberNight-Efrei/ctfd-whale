@@ -1,29 +1,41 @@
 {% extends "whale_base.html" %}
 
-{% block menu %}
-    <li class="nav-item">
-        <a class="nav-link active" data-toggle="pill" href="#docker">Docker</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link" data-toggle="pill" href="#router">Router</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link" data-toggle="pill" href="#limits">Limits</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link" data-toggle="pill" href="#challenges">Challenges</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link" href="/plugins/ctfd-whale/admin/containers">🔗 Instances</a>
-    </li>
-{% endblock %}
-
 {% block panel %}
     {% include "components/errors.html" %}
+
+    <header class="whale-admin-page-title">
+        <div>
+            <h2><i class="fas fa-sliders-h mr-2" aria-hidden="true"></i>Settings</h2>
+            <p>Configure Docker deployment, routing, resource limits and challenge defaults.</p>
+        </div>
+    </header>
+
+    <ul class="nav whale-config-tabs" role="tablist" aria-label="Whale settings sections">
+        <li class="nav-item">
+            <a class="nav-link active" data-toggle="pill" href="#docker" role="tab" aria-controls="docker" aria-selected="true">
+                <i class="fab fa-docker" aria-hidden="true"></i> Docker
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-toggle="pill" href="#router" role="tab" aria-controls="router" aria-selected="false">
+                <i class="fas fa-route" aria-hidden="true"></i> Routing
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-toggle="pill" href="#limits" role="tab" aria-controls="limits" aria-selected="false">
+                <i class="fas fa-gauge-high" aria-hidden="true"></i> Limits
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-toggle="pill" href="#challenges" role="tab" aria-controls="challenges" aria-selected="false">
+                <i class="fas fa-flag" aria-hidden="true"></i> Challenges
+            </a>
+        </li>
+    </ul>
+
     <div role="tabpanel" class="tab-pane config-section active" id="settings">
-        <form method="POST" accept-charset="utf-8" action="/admin/plugins/ctfd-whale"
-              class="form-horizontal">
-            <div class="tab-content">
+        <form method="POST" accept-charset="utf-8" action="/admin/plugins/ctfd-whale" class="form-horizontal">
+            <div class="tab-content whale-config-panel">
                 {% include "config/docker.config.html" %}
                 {% include "config/base.router.config.html" %}
                 {% include "config/limits.config.html" %}

@@ -14,6 +14,9 @@
                         <span class="whale-status-summary-label">Visible page:</span>
                         <span class="whale-status-badge whale-status-running" title="Instances whose current Swarm tasks are running"><span class="whale-status-dot" aria-hidden="true"></span>{{ status_counts.running }} Running</span>
                         <span class="whale-status-badge whale-status-starting" title="Instances with pending or starting Swarm tasks"><span class="whale-status-dot" aria-hidden="true"></span>{{ status_counts.starting }} Starting</span>
+                        {% if status_counts.stopped %}
+                            <span class="whale-status-badge whale-status-stopped" title="Instances whose Swarm services are configured with zero desired replicas"><span class="whale-status-dot" aria-hidden="true"></span>{{ status_counts.stopped }} Stopped</span>
+                        {% endif %}
                         {% set attention_count = status_counts.degraded + status_counts.error + status_counts.missing %}
                         {% if attention_count %}
                             <span class="whale-status-badge whale-status-error" title="Instances with failed tasks or missing Swarm services"><span class="whale-status-dot" aria-hidden="true"></span>{{ attention_count }} Needs attention</span>

@@ -131,7 +131,7 @@ def load(app):
                 1 for item in instance_statuses.values()
                 if item.get("state") == state
             )
-            for state in ("running", "starting", "degraded", "error", "missing", "unknown")
+            for state in ("running", "starting", "stopped", "degraded", "error", "missing", "unknown")
         }
 
         # Router.access() returns HTML intended to be embedded in the challenge

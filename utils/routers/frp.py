@@ -182,7 +182,21 @@ class FrpRouter(BaseRouter):
     def register(self, container: WhaleContainer):
         mappings = list(container.port_mappings)
         if not mappings:
-            return False, "No ports are configured for this challenge."
+            # Distinguish a genuinely unconfigured challenge from a deployment
+            # where the updated DBContainer snapshot code has not been loaded.
+            try:
+                configured_count = len(container.challenge.ports)
+            except Exception:
+                configured_count = 0
+            if configured_count:
+                return False, (
+                    "Port definitions exist for this challenge, but this instance has no port mappings. "
+                    "Ensure the updated utils/db.py is deployed and restart all CTFd workers."
+                )
+            return False, (
+                "No ports are configured for this challenge. Check that "
+                "dynamic_docker_challenge_ports contains rows for this challenge ID."
+            )
 
         cache = CacheProvider(app=current_app)
         allocated = []

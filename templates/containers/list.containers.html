@@ -1,89 +1,85 @@
-<div class="row">
-    <div class="col-md-12">
-        <table class="table table-striped border">
-            <thead>
+<div class="whale-instance-table-wrap">
+    <table class="table table-hover whale-instance-table">
+        <thead class="thead-light">
             <tr>
-                <th class="border-right" data-checkbox>
-                    <div class="form-check text-center">&nbsp;
-                        <input type="checkbox" class="form-check-input" data-checkbox-all>
+                <th class="whale-select-col" data-checkbox scope="col">
+                    <div class="form-check text-center">
+                        <input type="checkbox" class="form-check-input" data-checkbox-all aria-label="Select all instances on this page">
                     </div>
                 </th>
-                <th class="sort-col text-center"><b>ID</b></td>
-                <th class="text-center"><b>UUID</b></td>
-                <th class="text-center"><b>Node</b></td>
-                <th class="text-center"><b>User</b></td>
-                <th class="sort-col text-center"><b>Challenge</b></td>
-                <th class="text-center"><b>Access Method</b></td>
-                <th class="text-center"><b>Flag</b></td>
-                <th class="sort-col text-center"><b>Startup Time</b></td>
-                <th class="sort-col text-center"><b>Renewal Times</b></td>
-                <th class="text-center"><b>Delete</b></td>
+                <th class="whale-id-col" scope="col">ID</th>
+                <th scope="col">Instance UUID</th>
+                <th class="whale-node-col" scope="col">Node</th>
+                <th scope="col">User</th>
+                <th scope="col">Challenge</th>
+                <th scope="col">Exposed ports / access</th>
+                <th scope="col">Flag</th>
+                <th class="whale-started-col" scope="col">Started</th>
+                <th class="whale-renewal-col" scope="col">Renewals</th>
+                <th class="whale-actions-col" scope="col">Actions</th>
             </tr>
-            </thead>
-            <tbody>
+        </thead>
+        <tbody>
             {% for container in containers %}
                 <tr>
-                    <td class="border-right" data-checkbox>
-                        <div class="form-check text-center">&nbsp;
-                            <input type="checkbox" class="form-check-input" data-user-id="{{ container.user.id }}">
+                    <td class="whale-select-col" data-checkbox>
+                        <div class="form-check text-center">
+                            <input type="checkbox" class="form-check-input" data-user-id="{{ container.user.id }}" aria-label="Select instance {{ container.id }}">
                         </div>
                     </td>
-                    <td class="text-center">
-                        {{ container.id }}
+                    <td class="whale-id-col">#{{ container.id }}</td>
+                    <td>
+                        <span class="whale-instance-uuid">{{ container.uuid | truncate(8, True, '…') }}
+                            <button type="button" class="btn btn-link whale-copy-button click-copy" data-copy="{{ container.uuid }}" aria-label="Copy instance UUID" title="Copy UUID">
+                                <i class="fas fa-copy" aria-hidden="true"></i>
+                            </button>
+                        </span>
                     </td>
-                    <td class="text-center">
-                        {{ container.uuid | truncate(8) }}&nbsp;
-                        <button class="btn btn-link p-0 click-copy" data-copy="{{ container.uuid }}">
-                            <i class="fas fa-clipboard"></i>
-                        </button>
-                    </td>
-                    <td class="text-center">
-                        {{ container.node }}
-                    </td>
-                    <td class="text-center">
-                        <a href="{{ url_for('admin.users_detail', user_id=container.user.id) }}">
-                            {{ container.user.name | truncate(12) }}
+                    <td class="whale-node-col"><span class="badge badge-light border">{{ container.node or '—' }}</span></td>
+                    <td class="whale-user-col">
+                        <a href="{{ url_for('admin.users_detail', user_id=container.user.id) }}" title="{{ container.user.name }}">
+                            {{ container.user.name | truncate(18, True, '…') }}
                         </a>
                     </td>
-                    <td class="text-center">
-                        <a href="{{ url_for('admin.challenges_detail', challenge_id=container.challenge.id) }}">
-                            {{ container.challenge.name }}
+                    <td class="whale-challenge-col">
+                        <a href="{{ url_for('admin.challenges_detail', challenge_id=container.challenge.id) }}" title="{{ container.challenge.name }}">
+                            {{ container.challenge.name | truncate(24, True, '…') }}
                         </a>
                     </td>
-                    <td class="text-center">
-                        {{ container.challenge.redirect_type }}&nbsp;
-                        <button class="btn btn-link p-0 click-copy" data-copy="{{ container.user_access }}">
-                            <i class="fas fa-clipboard"></i>
+                    <td>
+                        {% if container.port_mappings %}
+                            <div class="whale-port-list">
+                                {% for port in container.port_mappings %}
+                                    <span class="badge badge-light whale-port-badge">
+                                        <span class="whale-port-name">{{ port.name }}</span>
+                                        <span class="whale-port-detail">{{ port.protocol|upper }} · {{ port.internal_port }}{% if port.public_port %} → {{ port.public_port }}{% endif %}</span>
+                                    </span>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <button type="button" class="btn btn-sm btn-outline-secondary click-copy" data-copy="{{ container.user_access }}" title="Copy access details">
+                            <i class="fas fa-terminal mr-1" aria-hidden="true"></i>Copy access
                         </button>
                     </td>
-                    <td class="text-center">
-                        <button class="btn btn-link p-0 click-copy" data-copy="{{ container.flag }}">
-                            <i class="fas fa-clipboard"></i>
+                    <td>
+                        <button type="button" class="btn btn-link whale-copy-button click-copy" data-copy="{{ container.flag }}" title="Copy flag" aria-label="Copy flag">
+                            <i class="fas fa-flag mr-1" aria-hidden="true"></i><i class="fas fa-copy" aria-hidden="true"></i>
                         </button>
                     </td>
-                    <td class="text-center">
-                        <span data-time="{{ container.start_time | isoformat }}"></span>
-                    </td>
-                    <td class="text-center">
-                        {{ container.renew_count }}&nbsp;
-                        <button class="btn btn-link p-0 renew-container"
-                           container-id="{{ container.id }}" data-toggle="tooltip"
-                           user-id="{{ container.user.id }}" data-placement="top"
-                           title="Renew Container #{{ container.id }}">
-                            <i class="fas fa-sync"></i>
+                    <td class="whale-started-col"><span data-time="{{ container.start_time | isoformat }}"></span></td>
+                    <td class="whale-renewal-col">
+                        <span class="badge badge-light border">{{ container.renew_count }}</span>
+                        <button type="button" class="btn btn-link renew-container" container-id="{{ container.id }}" data-toggle="tooltip" user-id="{{ container.user.id }}" data-placement="top" title="Renew instance #{{ container.id }}" aria-label="Renew instance {{ container.id }}">
+                            <i class="fas fa-sync" aria-hidden="true"></i>
                         </button>
                     </td>
-                    <td class="text-center">
-                        <button class="btn btn-link p-0 delete-container"
-                           container-id="{{ container.id }}" data-toggle="tooltip"
-                           user-id="{{ container.user.id }}" data-placement="top"
-                           title="Destroy Container #{{ container.id }}">
-                            <i class="fas fa-times"></i>
-                    </button>
+                    <td class="whale-actions-col">
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-container" container-id="{{ container.id }}" data-toggle="tooltip" user-id="{{ container.user.id }}" data-placement="top" title="Destroy instance #{{ container.id }}" aria-label="Destroy instance {{ container.id }}">
+                            <i class="fas fa-trash-alt" aria-hidden="true"></i>
+                        </button>
                     </td>
                 </tr>
             {% endfor %}
-            </tbody>
-        </table>
-    </div>
+        </tbody>
+    </table>
 </div>

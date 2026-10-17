@@ -1,0 +1,325 @@
+.whale-instance-page {
+    margin-bottom: 2rem;
+}
+
+.whale-instance-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid rgba(127, 127, 127, 0.25);
+}
+
+.whale-instance-heading h2 {
+    margin: 0 0 .35rem;
+    font-size: 1.65rem;
+    font-weight: 600;
+}
+
+.whale-instance-heading p {
+    margin: 0;
+    color: var(--muted, #6c757d);
+}
+
+.whale-instance-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-top: .85rem;
+}
+
+.whale-instance-summary .badge {
+    font-size: .8rem;
+    font-weight: 500;
+    padding: .45rem .6rem;
+}
+
+.whale-instance-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: .75rem;
+}
+
+.whale-instance-toolbar .btn {
+    white-space: nowrap;
+}
+
+.whale-instance-table-wrap {
+    border: 1px solid rgba(127, 127, 127, 0.25);
+    border-radius: .45rem;
+    overflow: auto;
+}
+
+.whale-instance-table {
+    min-width: 1050px;
+    margin-bottom: 0;
+    font-size: .9rem;
+}
+
+.whale-instance-table thead th {
+    white-space: nowrap;
+    vertical-align: middle;
+    border-top: 0;
+}
+
+.whale-instance-table tbody td {
+    vertical-align: middle;
+}
+
+.whale-instance-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.whale-instance-table .whale-select-col {
+    width: 42px;
+    min-width: 42px;
+    text-align: center;
+}
+
+.whale-instance-table .whale-id-col {
+    width: 65px;
+    text-align: right;
+    color: var(--muted, #6c757d);
+    font-variant-numeric: tabular-nums;
+}
+
+.whale-instance-table .whale-node-col {
+    white-space: nowrap;
+}
+
+.whale-instance-table .whale-user-col,
+.whale-instance-table .whale-challenge-col {
+    min-width: 120px;
+    max-width: 200px;
+}
+
+.whale-instance-table .whale-instance-uuid {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    white-space: nowrap;
+    font-family: monospace;
+}
+
+.whale-instance-table .whale-port-list {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: .35rem;
+    min-width: 165px;
+    max-width: 260px;
+    margin-bottom: .35rem;
+}
+
+.whale-port-badge {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .35rem;
+    max-width: 100%;
+    padding: .35rem .45rem;
+    border: 1px solid rgba(127, 127, 127, 0.25);
+    font-weight: 500;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+.whale-port-badge .whale-port-name {
+    font-weight: 600;
+}
+
+.whale-port-badge .whale-port-detail {
+    opacity: .8;
+    font-variant-numeric: tabular-nums;
+}
+
+.whale-instance-table .whale-port-empty {
+    display: block;
+    margin-bottom: .35rem;
+    color: var(--muted, #6c757d);
+    font-size: .8rem;
+}
+
+.whale-instance-table .whale-copy-button {
+    padding: .15rem .35rem;
+    line-height: 1.3;
+}
+
+.whale-instance-table .whale-started-col {
+    min-width: 145px;
+    white-space: nowrap;
+}
+
+.whale-instance-table .whale-renewal-col {
+    min-width: 95px;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.whale-instance-table .whale-actions-col {
+    min-width: 100px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.whale-instance-table .whale-actions-col .btn + .btn {
+    margin-left: .3rem;
+}
+
+.whale-instance-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: .75rem;
+    margin-top: 1rem;
+}
+
+.whale-instance-pagination .pagination {
+    margin: 0;
+}
+
+.whale-instance-empty {
+    padding: 3rem 1.5rem;
+    border: 1px dashed rgba(127, 127, 127, 0.4);
+    border-radius: .5rem;
+    text-align: center;
+}
+
+.whale-instance-empty .whale-empty-icon {
+    margin-bottom: .75rem;
+    font-size: 2rem;
+    opacity: .6;
+}
+
+.whale-instance-empty h3 {
+    margin-bottom: .5rem;
+    font-size: 1.2rem;
+}
+
+.whale-instance-empty p {
+    margin-bottom: 0;
+    color: var(--muted, #6c757d);
+}
+
+.whale-instance-cards {
+    margin-top: .25rem;
+}
+
+.whale-instance-card {
+    height: 100%;
+    border: 1px solid rgba(127, 127, 127, 0.25);
+    border-radius: .5rem;
+    transition: box-shadow .15s ease, transform .15s ease;
+}
+
+.whale-instance-card:hover {
+    box-shadow: 0 .25rem .9rem rgba(0, 0, 0, .08);
+}
+
+.whale-instance-card .card-body {
+    display: flex;
+    flex-direction: column;
+    gap: .7rem;
+}
+
+.whale-instance-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .75rem;
+}
+
+.whale-instance-card-header h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.whale-instance-card-header .whale-instance-id {
+    flex: 0 0 auto;
+}
+
+.whale-instance-card-user {
+    display: inline-block;
+    align-self: flex-start;
+}
+
+.whale-instance-card-meta {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .65rem;
+}
+
+.whale-instance-card-meta small {
+    display: block;
+    margin-bottom: .2rem;
+    color: var(--muted, #6c757d);
+}
+
+.whale-instance-card-value {
+    overflow-wrap: anywhere;
+}
+
+.whale-instance-card-uuid {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .5rem .65rem;
+    background: rgba(127, 127, 127, 0.08);
+    border-radius: .3rem;
+    font-family: monospace;
+    overflow-wrap: anywhere;
+}
+
+.whale-instance-card-ports {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem;
+}
+
+.whale-instance-card-access {
+    overflow-wrap: anywhere;
+    font-size: .9rem;
+}
+
+.whale-instance-card-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: .5rem;
+    margin-top: auto;
+    padding-top: .35rem;
+    border-top: 1px solid rgba(127, 127, 127, 0.2);
+}
+
+.whale-instance-card-actions a {
+    cursor: pointer;
+}
+
+@media (max-width: 767.98px) {
+    .whale-instance-toolbar {
+        justify-content: flex-start;
+        width: 100%;
+    }
+
+    .whale-instance-card-meta {
+        grid-template-columns: 1fr;
+    }
+
+    .whale-instance-pagination {
+        justify-content: center;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .whale-instance-card {
+        transition: none;
+    }
+}

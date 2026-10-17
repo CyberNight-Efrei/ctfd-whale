@@ -1,4 +1,5 @@
 import fcntl
+import re
 import warnings
 
 import requests
@@ -121,6 +122,22 @@ def load(app):
             )
 
         nodes, challenges = DBContainer.get_admin_instance_filter_options()
+
+        # Router.access() returns HTML intended to be embedded in the challenge
+        # page. For admin templates, strip its inline script/style blocks: the
+        # admin page owns copy behavior and styles, so embedded scripts would
+        # otherwise double-bind clipboard handlers.
+        access_details = {}
+        for container in containers:
+            markup = container.user_access or ""
+            markup = re.sub(
+                r"<(script|style)\\b[^>]*>.*?</\\1\\s*>",
+                "",
+                markup,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+            access_details[container.id] = markup
+
         return render_template(
             "whale_containers.html",
             plugin_name=plugin_name,
@@ -135,6 +152,7 @@ def load(app):
             protocol_filter=protocol_filter,
             nodes=nodes,
             challenges=challenges,
+            access_details=access_details,
         )
 
     def auto_clean_container():

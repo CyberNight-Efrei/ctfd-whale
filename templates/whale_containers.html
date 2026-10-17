@@ -1,30 +1,21 @@
 {% extends "whale_base.html" %}
 
-{% block menu %}
-    <li class="nav-item">
-        <a class="nav-link" href="/plugins/ctfd-whale/admin/settings"><i class="fas fa-sliders-h mr-2"></i>Settings</a>
-    </li>
-    <li class="nav-item">
-        <a class="nav-link active" href="/plugins/ctfd-whale/admin/containers"><i class="fas fa-cubes mr-2"></i>Instances</a>
-    </li>
-{% endblock %}
-
 {% block panel %}
     <link rel="stylesheet" href="{{ url_for('plugins.ctfd-whale.assets', path='admin-containers.css') }}">
     <section class="whale-instance-page">
         <header class="whale-instance-header">
             <div class="whale-instance-heading">
-                <h2><i class="fas fa-cubes mr-2" aria-hidden="true"></i>Dynamic instances</h2>
-                <p>Review challenge instances and manage their lifecycle.</p>
+                <h2><i class="fas fa-cubes mr-2" aria-hidden="true"></i>Instances</h2>
+                <p>Inspect running challenge instances and manage their lifecycle.</p>
                 <div class="whale-instance-summary">
-                    <span class="badge badge-light border"><i class="fas fa-layer-group mr-1"></i> Page {{ curr_page }} of {{ [pages, 1]|max }}</span>
-                    <span class="badge badge-light border"><i class="fas fa-list mr-1"></i> {{ containers|length }} instance{{ '' if containers|length == 1 else 's' }} on this page</span>
+                    <span class="badge badge-light border"><i class="fas fa-layer-group mr-1" aria-hidden="true"></i> {{ total_count }} matching instance{{ '' if total_count == 1 else 's' }}</span>
+                    <span class="badge badge-light border"><i class="fas fa-file-alt mr-1" aria-hidden="true"></i> Page {{ curr_page }} of {{ [pages, 1]|max }}</span>
                 </div>
             </div>
             <div class="whale-instance-toolbar" aria-label="Instance administration actions">
                 <div class="btn-group" role="group" aria-label="Bulk instance actions">
                     <button type="button" class="btn btn-outline-secondary" data-toggle="tooltip" title="Renew selected instances" id="containers-renew-button">
-                        <i class="fas fa-sync mr-1" aria-hidden="true"></i><span>Renew selected</span>
+                        <i class="fas fa-sync-alt mr-1" aria-hidden="true"></i><span>Renew selected</span>
                     </button>
                     <button type="button" class="btn btn-outline-danger" data-toggle="tooltip" title="Stop selected instances" id="containers-delete-button">
                         <i class="fas fa-stop-circle mr-1" aria-hidden="true"></i><span>Stop selected</span>
@@ -32,13 +23,89 @@
                 </div>
                 <div class="btn-group" role="group" aria-label="Change instance layout">
                     {% if session['view_mode'] == 'card' %}
-                        <a class="btn btn-outline-secondary" href="?mode=list" aria-label="Switch to table view"><i class="fas fa-list mr-1" aria-hidden="true"></i>Table</a>
+                        <a class="btn btn-outline-secondary" href="{{ url_for('ctfd-whale.admin_list_containers', page=1, mode='list', q=search_term, node=node_filter, challenge_id=challenge_filter, protocol=protocol_filter, per_page=per_page) }}" aria-label="Switch to table view">
+                            <i class="fas fa-list mr-1" aria-hidden="true"></i>Table
+                        </a>
                     {% else %}
-                        <a class="btn btn-outline-secondary" href="?mode=card" aria-label="Switch to card view"><i class="fas fa-th-large mr-1" aria-hidden="true"></i>Cards</a>
+                        <a class="btn btn-outline-secondary" href="{{ url_for('ctfd-whale.admin_list_containers', page=1, mode='card', q=search_term, node=node_filter, challenge_id=challenge_filter, protocol=protocol_filter, per_page=per_page) }}" aria-label="Switch to card view">
+                            <i class="fas fa-th-large mr-1" aria-hidden="true"></i>Cards
+                        </a>
                     {% endif %}
                 </div>
             </div>
         </header>
+
+        <section class="whale-filter-panel" aria-labelledby="whale-filter-title">
+            <div class="whale-filter-heading" id="whale-filter-title">
+                <i class="fas fa-filter" aria-hidden="true"></i>
+                <span>Search and filters</span>
+            </div>
+            <form id="whale-instance-filters" method="GET" action="{{ url_for('ctfd-whale.admin_list_containers') }}">
+                <input type="hidden" name="mode" value="{{ session['view_mode'] }}">
+                <div class="whale-filter-grid">
+                    <div>
+                        <label for="whale-filter-search">Search</label>
+                        <input class="form-control" type="search" id="whale-filter-search" name="q" value="{{ search_term }}" placeholder="User, challenge, UUID, ID, node or port…" autocomplete="off">
+                    </div>
+                    <div>
+                        <label for="whale-filter-node">Node</label>
+                        <select class="form-control" id="whale-filter-node" name="node">
+                            <option value="">All nodes</option>
+                            {% for node in nodes %}
+                                <option value="{{ node }}" {% if node_filter == node %}selected{% endif %}>{{ node }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="whale-filter-challenge">Challenge</label>
+                        <select class="form-control" id="whale-filter-challenge" name="challenge_id">
+                            <option value="">All challenges</option>
+                            {% for challenge_id, challenge_name in challenges %}
+                                <option value="{{ challenge_id }}" {% if challenge_filter == challenge_id|string %}selected{% endif %}>{{ challenge_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="whale-filter-protocol">Protocol</label>
+                        <select class="form-control" id="whale-filter-protocol" name="protocol">
+                            <option value="">All protocols</option>
+                            <option value="http" {% if protocol_filter == 'http' %}selected{% endif %}>HTTP</option>
+                            <option value="tcp" {% if protocol_filter == 'tcp' %}selected{% endif %}>TCP</option>
+                            <option value="ssh" {% if protocol_filter == 'ssh' %}selected{% endif %}>SSH</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="whale-filter-actions">
+                    <label for="whale-filter-per-page" class="mb-0 align-self-center mr-1">Rows per page</label>
+                    <select class="form-control form-control-sm" style="width:auto;" name="per_page" id="whale-filter-per-page">
+                        <option value="20" {% if per_page == 20 %}selected{% endif %}>20</option>
+                        <option value="50" {% if per_page == 50 %}selected{% endif %}>50</option>
+                        <option value="100" {% if per_page == 100 %}selected{% endif %}>100</option>
+                    </select>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search mr-1" aria-hidden="true"></i>Apply filters
+                    </button>
+                    {% if search_term or node_filter or challenge_filter or protocol_filter %}
+                        <a class="btn btn-outline-secondary" href="{{ url_for('ctfd-whale.admin_list_containers', mode=session['view_mode'], per_page=per_page) }}">
+                            <i class="fas fa-times mr-1" aria-hidden="true"></i>Clear filters
+                        </a>
+                    {% endif %}
+                </div>
+            </form>
+        </section>
+
+        <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+            <span class="whale-filter-result-count">
+                {% if total_count %}
+                    Showing {{ (curr_page - 1) * per_page + 1 }}–{{ (curr_page - 1) * per_page + containers|length }} of {{ total_count }} matching instances
+                {% else %}
+                    No matching instances
+                {% endif %}
+            </span>
+            {% if search_term or node_filter or challenge_filter or protocol_filter %}
+                <span class="badge badge-light border"><i class="fas fa-filter mr-1" aria-hidden="true"></i>Filters active</span>
+            {% endif %}
+        </div>
 
         {% if containers %}
             {% include "containers/" + session["view_mode"] + ".containers.html" %}
@@ -46,7 +113,7 @@
                 <span class="text-muted small">Page {{ curr_page }} of {{ [pages, 1]|max }}</span>
                 <ul class="pagination">
                     <li class="page-item{{ ' disabled' if curr_page <= 1 else '' }}">
-                        <a class="page-link" aria-label="Previous page" href="/plugins/ctfd-whale/admin/containers?page={{ curr_page - 1 }}{% if session['view_mode'] == 'card' %}&mode=card{% endif %}">
+                        <a class="page-link" aria-label="Previous page" href="{{ url_for('ctfd-whale.admin_list_containers', page=curr_page - 1, mode=session['view_mode'], q=search_term, node=node_filter, challenge_id=challenge_filter, protocol=protocol_filter, per_page=per_page) }}">
                             <span aria-hidden="true">&laquo;</span><span class="sr-only">Previous</span>
                         </a>
                     </li>
@@ -54,11 +121,11 @@
                     {% set range_r = [[curr_page + 2, pages]|min, [4, pages]|min]|max %}
                     {% for page in range(range_l, range_r + 1) %}
                         <li class="page-item{{ ' active' if curr_page == page else '' }}">
-                            <a class="page-link" href="/plugins/ctfd-whale/admin/containers?page={{ page }}{% if session['view_mode'] == 'card' %}&mode=card{% endif %}">{{ page }}</a>
+                            <a class="page-link" href="{{ url_for('ctfd-whale.admin_list_containers', page=page, mode=session['view_mode'], q=search_term, node=node_filter, challenge_id=challenge_filter, protocol=protocol_filter, per_page=per_page) }}">{{ page }}</a>
                         </li>
                     {% endfor %}
                     <li class="page-item{{ ' disabled' if curr_page >= pages else '' }}">
-                        <a class="page-link" aria-label="Next page" href="/plugins/ctfd-whale/admin/containers?page={{ curr_page + 1 }}{% if session['view_mode'] == 'card' %}&mode=card{% endif %}">
+                        <a class="page-link" aria-label="Next page" href="{{ url_for('ctfd-whale.admin_list_containers', page=curr_page + 1, mode=session['view_mode'], q=search_term, node=node_filter, challenge_id=challenge_filter, protocol=protocol_filter, per_page=per_page) }}">
                             <span aria-hidden="true">&raquo;</span><span class="sr-only">Next</span>
                         </a>
                     </li>
@@ -66,9 +133,12 @@
             </nav>
         {% else %}
             <div class="whale-instance-empty">
-                <div class="whale-empty-icon"><i class="fas fa-cubes" aria-hidden="true"></i></div>
-                <h3>No instances on this page</h3>
-                <p>There are no dynamic challenge instances to display here.</p>
+                <div class="whale-empty-icon"><i class="fas {{ 'fa-search' if search_term or node_filter or challenge_filter or protocol_filter else 'fa-cubes' }}" aria-hidden="true"></i></div>
+                <h3>{{ 'No instances match these filters' if search_term or node_filter or challenge_filter or protocol_filter else 'No active instances' }}</h3>
+                <p>{{ 'Try changing the search terms or clearing one or more filters.' if search_term or node_filter or challenge_filter or protocol_filter else 'There are currently no active dynamic challenge instances.' }}</p>
+                {% if search_term or node_filter or challenge_filter or protocol_filter %}
+                    <a class="btn btn-outline-secondary mt-3" href="{{ url_for('ctfd-whale.admin_list_containers', mode=session['view_mode'], per_page=per_page) }}">Clear filters</a>
+                {% endif %}
             </div>
         {% endif %}
     </section>

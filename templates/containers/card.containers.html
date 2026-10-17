@@ -51,9 +51,9 @@
                     </div>
 
                     <div>
-                        <small class="text-muted d-block mb-1">Access details</small>
-                        <div class="whale-instance-card-access">{{ container.user_access | safe }}</div>
-                        <button type="button" class="btn btn-sm btn-outline-secondary click-copy mt-2" data-copy="{{ container.user_access }}">
+                        <small class="text-muted d-block mb-1">Connection details</small>
+                        <div class="whale-instance-card-access">{{ access_details[container.id] | safe }}</div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary click-copy mt-2" data-copy-html="{{ access_details[container.id] }}">
                             <i class="fas fa-copy mr-1" aria-hidden="true"></i>Copy access
                         </button>
                         <button type="button" class="btn btn-sm btn-outline-secondary click-copy mt-2" data-copy="{{ container.flag }}" title="Copy flag">

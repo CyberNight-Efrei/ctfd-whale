@@ -12,7 +12,7 @@
                 <th class="whale-node-col" scope="col">Node</th>
                 <th scope="col">User</th>
                 <th scope="col">Challenge</th>
-                <th scope="col">Exposed ports / access</th>
+                <th scope="col">Ports &amp; access</th>
                 <th scope="col">Flag</th>
                 <th class="whale-started-col" scope="col">Started</th>
                 <th class="whale-renewal-col" scope="col">Renewals</th>
@@ -70,11 +70,11 @@
                     <td class="whale-renewal-col">
                         <span class="badge badge-light border">{{ container.renew_count }}</span>
                         <button type="button" class="btn btn-link renew-container" container-id="{{ container.id }}" data-toggle="tooltip" user-id="{{ container.user.id }}" data-placement="top" title="Renew instance #{{ container.id }}" aria-label="Renew instance {{ container.id }}">
-                            <i class="fas fa-sync" aria-hidden="true"></i>
+                            <i class="fas fa-sync-alt" aria-hidden="true"></i>
                         </button>
                     </td>
                     <td class="whale-actions-col">
-                        <button type="button" class="btn btn-sm btn-outline-danger delete-container" container-id="{{ container.id }}" data-toggle="tooltip" user-id="{{ container.user.id }}" data-placement="top" title="Destroy instance #{{ container.id }}" aria-label="Destroy instance {{ container.id }}">
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-container" container-id="{{ container.id }}" data-toggle="tooltip" user-id="{{ container.user.id }}" data-placement="top" title="Stop instance #{{ container.id }}" aria-label="Destroy instance {{ container.id }}">
                             <i class="fas fa-trash-alt" aria-hidden="true"></i>
                         </button>
                     </td>

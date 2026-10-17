@@ -175,9 +175,31 @@ def load(app):
 
     def auto_clean_container():
         with app.app_context():
-            results = DBContainer.get_all_expired_container()
-            for r in results:
-                ControlUtil.try_remove_container(r.user_id)
+            try:
+                results = DBContainer.get_all_cleanup_candidates()
+            except Exception:
+                current_app.logger.exception(
+                    "[CTFd-Whale] Unable to query expired or stale instances"
+                )
+                return
+
+            for expired_container in results:
+                try:
+                    removed, message = ControlUtil.try_remove_container(
+                        expired_container.user_id
+                    )
+                    if not removed and message != "No such container":
+                        current_app.logger.warning(
+                            "[CTFd-Whale] Automatic cleanup is pending for instance %s: %s",
+                            expired_container.uuid,
+                            message,
+                        )
+                except Exception:
+                    # One broken instance must not prevent cleanup of the others.
+                    current_app.logger.exception(
+                        "[CTFd-Whale] Automatic cleanup failed for instance %s",
+                        expired_container.uuid,
+                    )
 
     app.register_blueprint(page_blueprint)
 

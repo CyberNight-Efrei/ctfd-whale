@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import String, cast, or_
+from sqlalchemy import String, and_, cast, or_
 
 from CTFd.models import Users, db
 from CTFd.utils import get_config
@@ -107,6 +107,33 @@ class DBContainer:
             < datetime.datetime.now() - datetime.timedelta(seconds=timeout)
         )
         return q.all()
+
+    @staticmethod
+    def get_all_cleanup_candidates():
+        """Find expired instances and stale in-progress lifecycle transitions."""
+        now = datetime.datetime.now()
+        timeout = int(get_config("whale:docker_timeout", "3600"))
+        provisioning_timeout = max(
+            60, int(get_config("whale:docker_provisioning_timeout", "600"))
+        )
+        expired_before = now - datetime.timedelta(seconds=timeout)
+        stale_before = now - datetime.timedelta(seconds=provisioning_timeout)
+        transitional_states = (
+            WhaleContainer.STATUS_PROVISIONING,
+            WhaleContainer.STATUS_STARTING,
+            WhaleContainer.STATUS_STOPPING,
+            WhaleContainer.STATUS_CLEANUP_PENDING,
+        )
+        q = db.session.query(WhaleContainer).filter(
+            or_(
+                WhaleContainer.start_time < expired_before,
+                and_(
+                    WhaleContainer.status.in_(transitional_states),
+                    WhaleContainer.start_time < stale_before,
+                ),
+            )
+        )
+        return q.order_by(WhaleContainer.start_time.asc()).all()
 
     @staticmethod
     def get_all_alive_container():

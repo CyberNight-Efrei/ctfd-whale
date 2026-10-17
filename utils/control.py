@@ -10,6 +10,7 @@ from .cache import CacheProvider
 from .db import DBContainer
 from .docker import DockerUtils
 from .routers import Router
+from ..models import WhaleContainer
 
 
 class ControlUtil:
@@ -21,6 +22,7 @@ class ControlUtil:
             container.start_time = datetime.datetime.now() - datetime.timedelta(
                 seconds=timeout + 1
             )
+            container.status = WhaleContainer.STATUS_CLEANUP_PENDING
             db.session.add(container)
             db.session.commit()
         except Exception:
@@ -119,15 +121,31 @@ class ControlUtil:
             )
 
         try:
+            container.status = WhaleContainer.STATUS_STARTING
+            db.session.commit()
             ok, message = Router.register(container)
         except Exception as exc:
+            db.session.rollback()
             logging.exception(
-                "Router registration raised an exception for Whale instance %s-%s",
+                "Router registration or lifecycle transition failed for Whale instance %s-%s",
                 container.user_id,
                 container.uuid,
             )
             ok, message = False, str(exc) or "Router registration failed"
 
+        if ok:
+            try:
+                container.status = WhaleContainer.STATUS_READY
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+                logging.exception(
+                    "Unable to persist ready state for Whale instance %s-%s",
+                    container.user_id,
+                    container.uuid,
+                )
+                ok = False
+                message = "The instance was provisioned, but its final lifecycle state could not be saved."
         if ok:
             return True, "Container created"
 
@@ -166,6 +184,19 @@ class ControlUtil:
         container = DBContainer.get_current_containers(user_id=user_id)
         if not container:
             return False, "No such container"
+
+        # Persist intent before making external changes. If the worker crashes,
+        # the stale STOPPING state lets the janitor resume cleanup later.
+        try:
+            container.status = WhaleContainer.STATUS_STOPPING
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            logging.exception(
+                "Unable to persist stopping state for Whale instance %s-%s",
+                container.user_id,
+                container.uuid,
+            )
 
         # Do not stop after a route error: Docker resources should still be
         # removed when possible. Keep the DB record and public-port ownership if
@@ -207,6 +238,8 @@ class ControlUtil:
         container = DBContainer.get_current_containers(user_id)
         if not container:
             return False, "No such container"
+        if container.lifecycle_state != "ready":
+            return False, "Instance is not in a ready state and cannot be renewed."
         timeout = int(get_config("whale:docker_timeout", "3600"))
         renewed_start_time = container.start_time + datetime.timedelta(seconds=timeout)
         if renewed_start_time <= datetime.datetime.now():

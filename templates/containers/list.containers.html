@@ -34,6 +34,7 @@
                         <span class="whale-status-badge whale-status-{{ runtime_status.state }}" title="{{ runtime_status.detail }}" aria-label="Swarm status: {{ runtime_status.label }}">
                             <span class="whale-status-dot" aria-hidden="true"></span>{{ runtime_status.label }}
                         </span>
+                        <small class="whale-status-detail">Lifecycle: {{ container.lifecycle_state|replace('_', ' ')|title }}</small>
                         {% if runtime_status.services_expected > 1 %}
                             <small class="whale-status-detail">{{ runtime_status.services_found }}/{{ runtime_status.services_expected }} services</small>
                         {% endif %}

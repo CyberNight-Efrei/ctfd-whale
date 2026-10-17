@@ -323,3 +323,74 @@
         transition: none;
     }
 }
+
+/* Shared visual language for the multi-port access block rendered by the router. */
+.whale-instance-card-access .whale-port-access {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.whale-instance-card-access .whale-port-access h6 {
+    margin-bottom: .55rem;
+    font-size: .9rem;
+    font-weight: 650;
+}
+
+.whale-instance-card-access .whale-port-access ul {
+    margin-bottom: .85rem;
+    padding-left: 1.2rem;
+}
+
+.whale-instance-card-access .whale-port-access li {
+    margin-bottom: .4rem;
+}
+
+.whale-instance-card-access .whale-port-access a {
+    overflow-wrap: anywhere;
+}
+
+.whale-instance-card-access .whale-port-access table {
+    margin: .75rem 0 .25rem;
+    font-size: .85rem;
+    overflow-wrap: anywhere;
+}
+
+.whale-instance-card-access .whale-port-access table td,
+.whale-instance-card-access .whale-port-access table th {
+    padding: .4rem .5rem;
+}
+
+.whale-instance-card-access .click-copy {
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+
+.whale-instance-card-access .click-copy:hover {
+    filter: brightness(.8);
+}
+
+.whale-instance-card-access code {
+    overflow-wrap: anywhere;
+}
+
+.whale-instance-table .click-copy,
+.whale-instance-card .click-copy {
+    cursor: pointer;
+}
+
+.whale-instance-table .whale-port-list {
+    margin-bottom: .5rem;
+}
+
+.whale-instance-table .whale-port-badge,
+.whale-instance-card .whale-port-badge {
+    color: inherit;
+    background: rgba(127, 127, 127, .07);
+    border-color: rgba(127, 127, 127, .27) !important;
+}
+
+.whale-instance-table .whale-port-detail,
+.whale-instance-card .whale-port-detail {
+    font-family: var(--font-monospace, monospace);
+    font-size: .78rem;
+}

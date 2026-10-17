@@ -223,8 +223,10 @@ class FilesystemCacheProvider:
         reserved.discard(int(port))
         cache.set(self.port_reservation_key, reserved)
 
-    def add_available_port(self, port):
+    def add_available_port(self, port, is_used=None):
         port = int(port)
+        if is_used is not None and is_used():
+            return False
         reserved = {int(item) for item in self._read_set(self.port_reservation_key)}
         reserved.discard(port)
         cache.set(self.port_reservation_key, reserved)

@@ -105,10 +105,6 @@ class UserContainers(Resource):
                     success=False,
                 )
 
-        current_count = DBContainer.get_all_alive_container_count()
-        if int(get_config("whale:docker_max_container_count")) <= int(current_count):
-            abort(403, 'Max container count exceed.', success=False)
-
         challenge_id = request.args.get('challenge_id')
         result, message = ControlUtil.try_add_container(
             user_id=user_id,

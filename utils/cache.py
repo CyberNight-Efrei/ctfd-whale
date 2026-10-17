@@ -27,6 +27,7 @@ RESERVATION_TTL_SECONDS = 300
 class CacheProvider:
     _lifecycle_locks = {}
     _lifecycle_locks_guard = threading.Lock()
+    _capacity_lock = threading.Lock()
 
     def __init__(self, app, *args, **kwargs):
         cache_type = app.config.get("CACHE_TYPE", "simple")
@@ -208,6 +209,12 @@ class CacheProvider:
     def release_lifecycle_lock(self):
         return self.provider.release_lifecycle_lock()
 
+    def acquire_capacity_lock(self):
+        return self.provider.acquire_capacity_lock()
+
+    def release_capacity_lock(self):
+        return self.provider.release_capacity_lock()
+
     def __getattr__(self, name):
         return self.provider.__getattribute__(name)
 
@@ -227,6 +234,7 @@ class FilesystemCacheProvider:
         self.port_reservation_key = PORT_POOL_KEY + "-reservations"
         self.network_reservation_key = NETWORK_POOL_KEY + "-reservations"
         self.current_lifecycle_lock = None
+        self.current_capacity_lock = False
 
     @staticmethod
     def _read_set(key):
@@ -329,6 +337,19 @@ class FilesystemCacheProvider:
         lock.release()
         return True
 
+    def acquire_capacity_lock(self):
+        if not CacheProvider._capacity_lock.acquire(timeout=10):
+            return False
+        self.current_capacity_lock = True
+        return True
+
+    def release_capacity_lock(self):
+        if not self.current_capacity_lock:
+            return False
+        self.current_capacity_lock = False
+        CacheProvider._capacity_lock.release()
+        return True
+
     def acquire_lock(self):
         return True
 
@@ -342,6 +363,7 @@ class RedisCacheProvider(FlaskRedis):
         self.key = "ctfd_whale_lock-" + str(kwargs.get("user_id", 0))
         self.current_lock = None
         self.current_lifecycle_lock = None
+        self.current_capacity_lock = None
         self.global_port_key = PORT_POOL_KEY
         self.global_network_key = NETWORK_POOL_KEY
 
@@ -520,6 +542,24 @@ class RedisCacheProvider(FlaskRedis):
     def release_lifecycle_lock(self):
         lock = self.current_lifecycle_lock
         self.current_lifecycle_lock = None
+        if lock is None:
+            return False
+        try:
+            lock.release()
+            return True
+        except LockError:
+            return False
+
+    def acquire_capacity_lock(self):
+        lock = self.lock(name="ctfd_whale_capacity", timeout=30)
+        if not lock.acquire(blocking=True, blocking_timeout=10.0):
+            return False
+        self.current_capacity_lock = lock
+        return True
+
+    def release_capacity_lock(self):
+        lock = self.current_capacity_lock
+        self.current_capacity_lock = None
         if lock is None:
             return False
         try:

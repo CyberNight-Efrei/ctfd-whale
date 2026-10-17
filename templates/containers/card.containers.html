@@ -37,7 +37,7 @@
                     </div>
 
                     <div>
-                        <small class="text-muted d-block mb-1">Exposed ports</small>
+                        <small class="text-muted d-block mb-1">Ports</small>
                         <div class="whale-instance-card-ports">
                             {% for port in container.port_mappings %}
                                 <span class="badge badge-light border whale-port-badge">
@@ -62,12 +62,12 @@
                     </div>
 
                     <footer class="whale-instance-card-actions">
-                        <a class="btn btn-sm btn-outline-secondary renew-container" container-id="{{ container.id }}" data-toggle="tooltip" data-placement="top" user-id="{{ container.user.id }}" title="Renew instance #{{ container.id }}" aria-label="Renew instance {{ container.id }}">
-                            <i class="fas fa-sync mr-1" aria-hidden="true"></i>Renew
-                        </a>
-                        <a class="btn btn-sm btn-outline-danger delete-container" container-id="{{ container.id }}" data-toggle="tooltip" data-placement="top" user-id="{{ container.user.id }}" title="Destroy instance #{{ container.id }}" aria-label="Destroy instance {{ container.id }}">
-                            <i class="fas fa-trash-alt mr-1" aria-hidden="true"></i>Stop
-                        </a>
+                        <button type="button" class="btn btn-sm btn-outline-secondary renew-container" container-id="{{ container.id }}" data-toggle="tooltip" data-placement="top" user-id="{{ container.user.id }}" title="Renew instance #{{ container.id }}" aria-label="Renew instance {{ container.id }}">
+                            <i class="fas fa-sync-alt mr-1" aria-hidden="true"></i>Renew
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-container" container-id="{{ container.id }}" data-toggle="tooltip" data-placement="top" user-id="{{ container.user.id }}" title="Destroy instance #{{ container.id }}" aria-label="Destroy instance {{ container.id }}">
+                            <i class="fas fa-stop-circle mr-1" aria-hidden="true"></i>Stop
+                        </button>
                     </footer>
                 </div>
             </article>

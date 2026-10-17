@@ -37,62 +37,112 @@ class CacheProvider:
                 f"Unsupported CTFd cache backend for CTFd-Whale: {cache_type}"
             )
 
-    def init_port_sets(self):
-        """Reconcile free resources without making allocated resources available."""
-        min_port = int(get_config("whale:frp_direct_port_minimum", 10000))
-        max_port = int(get_config("whale:frp_direct_port_maximum", 10100))
-        if not (1 <= min_port <= max_port <= 65535):
+    def _public_port_candidates(self):
+        minimum = int(get_config("whale:frp_direct_port_minimum", 10000))
+        maximum = int(get_config("whale:frp_direct_port_maximum", 10100))
+        if not (1 <= minimum <= maximum <= 65535):
             raise ValueError(
                 "Invalid FRP direct port range; expected 1 <= minimum <= maximum <= 65535."
             )
+        return set(range(minimum, maximum + 1))
 
-        # Read persisted allocations under the same Redis lock as allocators. This
-        # avoids a stale DB snapshot reintroducing a port just allocated elsewhere.
+    def _reconcile_public_ports(self):
+        # The Redis provider invokes this DB callback under its allocation lock.
         self.provider.reconcile_port_pool(
-            set(range(min_port, max_port + 1)),
+            self._public_port_candidates(),
             self._used_public_ports_from_db,
         )
 
-        # A Docker API outage must not prevent the direct port pool from being
-        # reconciled. Subnets are reconciled only when Swarm can be queried.
+    def _network_pool_snapshot(self):
+        from .docker import get_docker_client
+
+        client = get_docker_client()
+        base_network = ipaddress.ip_network(
+            get_config("whale:docker_subnet", "174.1.0.0/16"),
+            strict=False,
+        )
+        new_prefix = int(get_config("whale:docker_subnet_new_prefix", "24"))
+        if base_network.version != 4:
+            raise ValueError("CTFd-Whale grouped challenge pools currently require an IPv4 subnet.")
+        if not (base_network.prefixlen <= new_prefix <= 32):
+            raise ValueError(
+                "Docker subnet prefix must be between the configured subnet prefix and 32."
+            )
+        subnet_count = 1 << (new_prefix - base_network.prefixlen)
+        if subnet_count > 65536:
+            raise ValueError(
+                f"Docker subnet range would create {subnet_count} candidate subnets; "
+                "use a narrower range or larger subnet prefix."
+            )
+        candidates = {
+            str(subnet) for subnet in base_network.subnets(new_prefix=new_prefix)
+        }
+
+        def existing_network_prefixes():
+            prefixes = set()
+            for network in client.networks.list(filters={"label": "prefix"}):
+                attrs = getattr(network, "attrs", {}) or {}
+                labels = attrs.get("Labels") or {}
+                prefix = labels.get("prefix")
+                if prefix:
+                    prefixes.add(str(prefix))
+            return prefixes
+
+        return candidates, existing_network_prefixes
+
+    def _reconcile_network_pool(self):
+        candidates, existing_networks = self._network_pool_snapshot()
+        # This callback is invoked while the provider's distributed allocation
+        # lock is held so a concurrent subnet reservation cannot be lost.
+        self.provider.reconcile_network_pool(candidates, existing_networks)
+
+    def init_port_sets(self):
+        """Reconcile free resources without making allocated resources available."""
+        self._reconcile_public_ports()
         try:
-            from .docker import get_docker_client
-
-            client = get_docker_client()
-            base_network = ipaddress.ip_network(
-                get_config("whale:docker_subnet", "174.1.0.0/16"),
-                strict=False,
+            self._reconcile_network_pool()
+        except Exception as exc:
+            # Direct ports remain available even if Docker/Swarm is unreachable.
+            warnings.warn(
+                f"[CTFd-Whale] Unable to reconcile Docker network subnets: {exc}",
+                RuntimeWarning,
             )
-            new_prefix = int(get_config("whale:docker_subnet_new_prefix", "24"))
-            if not (base_network.prefixlen <= new_prefix <= base_network.max_prefixlen):
-                raise ValueError(
-                    "Docker subnet prefix must be between the configured subnet prefix "
-                    "and the address-family maximum."
-                )
-            network_candidates = {
-                str(subnet) for subnet in base_network.subnets(new_prefix=new_prefix)
-            }
 
-            def existing_network_prefixes():
-                prefixes = set()
-                for network in client.networks.list(filters={"label": "prefix"}):
-                    attrs = getattr(network, "attrs", {}) or {}
-                    labels = attrs.get("Labels") or {}
-                    prefix = labels.get("prefix")
-                    if prefix:
-                        prefixes.add(str(prefix))
-                return prefixes
-
-            # The provider invokes this callback while holding the pool lock, so
-            # the network discovery snapshot cannot race a new subnet allocation.
-            self.provider.reconcile_network_pool(
-                network_candidates, existing_network_prefixes
+    def get_available_port(self):
+        # Reconcile after every allocation. This lets the pool recover ports whose
+        # temporary lease expired after a worker crashed before persisting a mapping.
+        port = self.provider.get_available_port()
+        try:
+            self._reconcile_public_ports()
+        except Exception as exc:
+            warnings.warn(
+                f"[CTFd-Whale] Unable to reconcile the public port pool: {exc}",
+                RuntimeWarning,
             )
+        if port is not None:
+            return port
+        # The first call can report empty while an expired reservation still needs
+        # reconciliation. Retry once after rebuilding the pool from DB ownership.
+        return self.provider.get_available_port()
+
+    def get_available_network_range(self):
+        # Same recovery for abandoned temporary subnet reservations. A newly popped
+        # subnet stays protected by its reservation while Docker is being queried.
+        subnet = self.provider.get_available_network_range()
+        try:
+            self._reconcile_network_pool()
         except Exception as exc:
             warnings.warn(
                 f"[CTFd-Whale] Unable to reconcile Docker network subnets: {exc}",
                 RuntimeWarning,
             )
+        if subnet is not None:
+            return subnet
+        try:
+            self._reconcile_network_pool()
+        except Exception:
+            return None
+        return self.provider.get_available_network_range()
 
     @staticmethod
     def _used_public_ports_from_db():

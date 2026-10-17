@@ -118,9 +118,10 @@ class DBContainer:
         )
         expired_before = now - datetime.timedelta(seconds=timeout)
         stale_before = now - datetime.timedelta(seconds=provisioning_timeout)
+        # Only stale teardown states are retried by age. A provisioning or
+        # starting request may still be legitimately working; those states are
+        # cleaned after the normal instance timeout if the worker crashed.
         transitional_states = (
-            WhaleContainer.STATUS_PROVISIONING,
-            WhaleContainer.STATUS_STARTING,
             WhaleContainer.STATUS_STOPPING,
             WhaleContainer.STATUS_CLEANUP_PENDING,
         )
@@ -180,9 +181,16 @@ class DBContainer:
         """
         timeout = int(get_config("whale:docker_timeout", "3600"))
         alive_since = datetime.datetime.now() - datetime.timedelta(seconds=timeout)
-        q = db.session.query(WhaleContainer).filter(
-            WhaleContainer.start_time >= alive_since
+        visible_filter = or_(
+            WhaleContainer.start_time >= alive_since,
+            WhaleContainer.status.in_(
+                (
+                    WhaleContainer.STATUS_STOPPING,
+                    WhaleContainer.STATUS_CLEANUP_PENDING,
+                )
+            ),
         )
+        q = db.session.query(WhaleContainer).filter(visible_filter)
 
         search = (search or "").strip()
         if search:
@@ -240,7 +248,15 @@ class DBContainer:
         """Get filter options from instances that have not yet expired."""
         timeout = int(get_config("whale:docker_timeout", "3600"))
         alive_since = datetime.datetime.now() - datetime.timedelta(seconds=timeout)
-        alive_filter = WhaleContainer.start_time >= alive_since
+        alive_filter = or_(
+            WhaleContainer.start_time >= alive_since,
+            WhaleContainer.status.in_(
+                (
+                    WhaleContainer.STATUS_STOPPING,
+                    WhaleContainer.STATUS_CLEANUP_PENDING,
+                )
+            ),
+        )
 
         nodes = [
             row[0] for row in

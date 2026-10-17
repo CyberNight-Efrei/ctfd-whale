@@ -214,9 +214,8 @@ class FrpRouter(BaseRouter):
                 if mapping.protocol in ("tcp", "ssh") and not mapping.public_port:
                     port = cache.get_available_port()
                     if not port:
-                        # Discard the uncommitted mapping edits before returning
-                        # reservations, otherwise the DB identity map can make a
-                        # just-reserved port look persisted and in use.
+                        # Discard uncommitted mappings first. Otherwise the ORM's
+                        # identity map can make a reservation look persisted/in use.
                         db.session.rollback()
                         for allocated_port in allocated:
                             cache.add_available_port(allocated_port)
@@ -225,25 +224,74 @@ class FrpRouter(BaseRouter):
                     allocated.append(int(port))
             db.session.commit()
             self.reload()
+            # The DB mappings are durable now, so the short-lived reservation
+            # leases can be removed without making the ports available.
+            for allocated_port in allocated:
+                cache.commit_port_reservation(allocated_port)
             return True, "success"
         except Exception as exc:
             db.session.rollback()
-            # Remove any partially applied FRP entries before returning their ports.
+
+            # Only free a port after FRP confirms its route is absent and the
+            # persisted DB mapping has been cleared. If either step fails, the
+            # database mapping keeps ownership of the port for later cleanup.
+            routes_removed = False
             try:
                 self.reload(exclude=container.uuid)
+                routes_removed = True
             except Exception:
-                pass
-            for mapping in container.port_mappings:
-                if mapping.public_port in allocated:
-                    mapping.public_port = None
-            db.session.commit()
+                logging.exception(
+                    "Could not confirm removal of partially registered FRP routes "
+                    "for instance %s-%s",
+                    container.user_id,
+                    container.uuid,
+                )
+
+            mappings_cleared = False
+            if routes_removed:
+                try:
+                    for mapping in container.port_mappings:
+                        if mapping.public_port in allocated:
+                            mapping.public_port = None
+                    db.session.commit()
+                    mappings_cleared = True
+                except Exception:
+                    db.session.rollback()
+                    logging.exception(
+                        "Could not clear port mappings after FRP registration failure"
+                    )
+
             for allocated_port in allocated:
-                cache.add_available_port(allocated_port)
+                try:
+                    if mappings_cleared:
+                        cache.add_available_port(allocated_port)
+                    else:
+                        # The DB mapping still owns this port; release only the
+                        # temporary lease so reconciliation can rely on the DB.
+                        cache.commit_port_reservation(allocated_port)
+                except Exception:
+                    logging.exception(
+                        "Could not reconcile public port %s after FRP registration failure",
+                        allocated_port,
+                    )
+
             logging.log(
                 "whale", "Error registering multi-port FRP routes",
                 name=container.user.name if container.user else str(container.user_id),
                 challenge_id=container.challenge_id,
             )
+            if not routes_removed:
+                return False, (
+                    "FRP registration failed and route removal could not be confirmed. "
+                    "Allocated ports remain reserved; retry instance cleanup. "
+                    f"Details: {exc}"
+                )
+            if not mappings_cleared:
+                return False, (
+                    "FRP registration failed and port mappings could not be cleared. "
+                    "Allocated ports remain reserved for safety. "
+                    f"Details: {exc}"
+                )
             return False, f"Unable to register FRP routes: {exc}"
 
     def unregister(self, container: WhaleContainer):

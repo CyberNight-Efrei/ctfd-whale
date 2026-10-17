@@ -122,6 +122,9 @@ class DBContainer:
         # starting request may still be legitimately working; those states are
         # cleaned after the normal instance timeout if the worker crashed.
         transitional_states = (
+            # start_time is reset when Docker provisioning ends and route setup
+            # begins, so a crashed STARTING operation can be retried after grace.
+            WhaleContainer.STATUS_STARTING,
             WhaleContainer.STATUS_STOPPING,
             WhaleContainer.STATUS_CLEANUP_PENDING,
         )

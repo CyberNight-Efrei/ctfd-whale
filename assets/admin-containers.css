@@ -491,3 +491,9 @@
 .whale-instance-table .whale-status-col .whale-status-detail {
     font-size: .72rem;
 }
+
+.whale-status-summary-label {
+    color: var(--muted, #6c757d);
+    font-size: .78rem;
+    font-weight: 650;
+}

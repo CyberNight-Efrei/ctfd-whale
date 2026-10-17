@@ -153,17 +153,50 @@ class CacheProvider:
         )
         return {int(row[0]) for row in rows}
 
-    def add_available_port(self, port):
-        """Return a port only when no persisted instance currently owns it."""
-        port = int(port)
-        if (
+    @staticmethod
+    def _is_public_port_used(port):
+        return (
             db.session.query(WhaleContainerPort.id)
-            .filter(WhaleContainerPort.public_port == port)
+            .filter(WhaleContainerPort.public_port == int(port))
             .first()
             is not None
-        ):
+        )
+
+    def add_available_port(self, port):
+        """Return a public port without overriding an in-flight reservation."""
+        return self.provider.add_available_port(
+            int(port),
+            is_used=lambda: self._is_public_port_used(port),
+        )
+
+    def add_available_network_range(self, *ranges):
+        """Return subnets only when neither a live network nor a lease owns them."""
+        try:
+            from .docker import get_docker_client
+
+            client = get_docker_client()
+
+            def used_subnets():
+                used = set()
+                for network in client.networks.list(filters={"label": "prefix"}):
+                    attrs = getattr(network, "attrs", {}) or {}
+                    labels = attrs.get("Labels") or {}
+                    prefix = labels.get("prefix")
+                    if prefix:
+                        used.add(str(prefix))
+                return used
+
+            return self.provider.add_available_network_range(
+                *ranges, is_used=used_subnets
+            )
+        except Exception as exc:
+            # Fail closed. Pool reconciliation will re-discover the subnet later;
+            # never mark it free when current Docker ownership is unknown.
+            warnings.warn(
+                f"[CTFd-Whale] Unable to safely return Docker subnet to the pool: {exc}",
+                RuntimeWarning,
+            )
             return False
-        return self.provider.add_available_port(port)
 
     def __getattr__(self, name):
         return self.provider.__getattribute__(name)
@@ -254,13 +287,15 @@ class FilesystemCacheProvider:
         reserved.discard(str(subnet))
         cache.set(self.network_reservation_key, reserved)
 
-    def add_available_network_range(self, *ranges):
+    def add_available_network_range(self, *ranges, is_used=None):
+        used = set(is_used()) if is_used is not None else set()
         reserved = self._read_set(self.network_reservation_key)
         available = self._read_set(self.global_network_key)
         for subnet in ranges:
-            reserved.discard(str(subnet))
-            available.add(str(subnet))
-        cache.set(self.network_reservation_key, reserved)
+            subnet = str(subnet)
+            if subnet in used or subnet in reserved:
+                continue
+            available.add(subnet)
         cache.set(self.global_network_key, available)
 
     def acquire_lock(self):
@@ -362,7 +397,7 @@ class RedisCacheProvider(FlaskRedis):
         finally:
             lock.release()
 
-    def add_available_port(self, port):
+    def add_available_port(self, port, is_used=None):
         port = int(port)
         minimum = int(get_config("whale:frp_direct_port_minimum", 10000))
         maximum = int(get_config("whale:frp_direct_port_maximum", 10100))
@@ -370,7 +405,12 @@ class RedisCacheProvider(FlaskRedis):
         if lock is None:
             raise RuntimeError("Unable to acquire the Redis port-pool lock.")
         try:
-            self.delete(self._reservation_key("port", port))
+            # A concurrent allocator may have reserved this port after its former
+            # DB mapping was cleared. Never delete its lease or reinsert the port.
+            if self.exists(self._reservation_key("port", port)):
+                return False
+            if is_used is not None and is_used():
+                return False
             if minimum <= port <= maximum:
                 self.sadd(self.global_port_key, str(port))
         finally:
@@ -409,15 +449,25 @@ class RedisCacheProvider(FlaskRedis):
         finally:
             lock.release()
 
-    def add_available_network_range(self, *ranges):
+    def add_available_network_range(self, *ranges, is_used=None):
         lock = self._pool_lock()
         if lock is None:
             raise RuntimeError("Unable to acquire the Redis network-pool lock.")
         try:
+            currently_used = set(is_used()) if is_used is not None else set()
+            available = []
             for subnet in ranges:
-                self.delete(self._reservation_key("network", str(subnet)))
-            if ranges:
-                self.sadd(self.global_network_key, *[str(item) for item in ranges])
+                subnet = str(subnet)
+                # A concurrent grouped challenge may have reserved this subnet
+                # after the old network was removed. Preserve its lease and also
+                # verify that Docker has not already attached the subnet elsewhere.
+                if self.exists(self._reservation_key("network", subnet)):
+                    continue
+                if subnet in currently_used:
+                    continue
+                available.append(subnet)
+            if available:
+                self.sadd(self.global_network_key, *available)
         finally:
             lock.release()
 

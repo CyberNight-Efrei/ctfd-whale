@@ -12,7 +12,7 @@ function htmlToPlainText(markup) {
         element.insertAdjacentText("beforebegin", "\n");
         element.remove();
     });
-    wrapper.querySelectorAll("li, tr, p, h1, h2, h3, h4, h5, h6").forEach((element) => {
+    wrapper.querySelectorAll("td, th").forEach((element) => {\n        element.insertAdjacentText("afterend", " — ");\n    });\n    wrapper.querySelectorAll("li, tr, p, h1, h2, h3, h4, h5, h6").forEach((element) => {
         element.insertAdjacentText("beforebegin", "\n");
         element.insertAdjacentText("afterend", "\n");
     });
@@ -149,7 +149,7 @@ $(".delete-container").click(function (e) {
 
     CTFd.ui.ezq.ezQuery({
         title: "Stop instance",
-        body: "<span>Are you sure you want to delete <strong>Container #{0}</strong>?</span>".format(
+        body: "<span>Are you sure you want to stop <strong>instance #{0}</strong>?</span>".format(
             htmlentities(container_id)
         ),
         success: async function () {
@@ -166,7 +166,7 @@ $(".renew-container").click(function (e) {
 
     CTFd.ui.ezq.ezQuery({
         title: "Renew instance",
-        body: "<span>Are you sure you want to renew <strong>Container #{0}</strong>?</span>".format(
+        body: "<span>Are you sure you want to renew <strong>instance #{0}</strong>?</span>".format(
             htmlentities(container_id)
         ),
         success: async function () {

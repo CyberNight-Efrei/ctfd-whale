@@ -299,7 +299,7 @@
     border-top: 1px solid rgba(127, 127, 127, 0.2);
 }
 
-.whale-instance-card-actions a {
+.whale-instance-card-actions button {
     cursor: pointer;
 }
 

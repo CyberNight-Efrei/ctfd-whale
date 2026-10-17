@@ -123,6 +123,17 @@ def load(app):
 
         nodes, challenges = DBContainer.get_admin_instance_filter_options()
 
+        # Read-only runtime inspection: show what Swarm currently reports,
+        # rather than assuming a database row means that an instance is running.
+        instance_statuses = DockerUtils.get_instance_statuses(containers)
+        status_counts = {
+            state: sum(
+                1 for item in instance_statuses.values()
+                if item.get("state") == state
+            )
+            for state in ("running", "starting", "degraded", "error", "missing", "unknown")
+        }
+
         # Router.access() returns HTML intended to be embedded in the challenge
         # page. For admin templates, strip its inline script/style blocks: the
         # admin page owns copy behavior and styles, so embedded scripts would
@@ -153,6 +164,8 @@ def load(app):
             nodes=nodes,
             challenges=challenges,
             access_details=access_details,
+            instance_statuses=instance_statuses,
+            status_counts=status_counts,
         )
 
     def auto_clean_container():

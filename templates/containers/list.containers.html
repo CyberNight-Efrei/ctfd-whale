@@ -8,6 +8,7 @@
                     </div>
                 </th>
                 <th class="whale-id-col" scope="col">ID</th>
+                <th scope="col">Swarm status</th>
                 <th scope="col">Instance UUID</th>
                 <th class="whale-node-col" scope="col">Node</th>
                 <th scope="col">User</th>
@@ -28,6 +29,15 @@
                         </div>
                     </td>
                     <td class="whale-id-col">#{{ container.id }}</td>
+                    {% set runtime_status = instance_statuses[container.id] %}
+                    <td class="whale-status-col">
+                        <span class="whale-status-badge whale-status-{{ runtime_status.state }}" title="{{ runtime_status.detail }}" aria-label="Swarm status: {{ runtime_status.label }}">
+                            <span class="whale-status-dot" aria-hidden="true"></span>{{ runtime_status.label }}
+                        </span>
+                        {% if runtime_status.services_expected > 1 %}
+                            <small class="whale-status-detail">{{ runtime_status.services_found }}/{{ runtime_status.services_expected }} services</small>
+                        {% endif %}
+                    </td>
                     <td>
                         <span class="whale-instance-uuid">{{ container.uuid | truncate(8, True, '…') }}
                             <button type="button" class="btn btn-link whale-copy-button click-copy" data-copy="{{ container.uuid }}" aria-label="Copy instance UUID" title="Copy UUID">

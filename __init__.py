@@ -131,7 +131,7 @@ def load(app):
         for container in containers:
             markup = container.user_access or ""
             markup = re.sub(
-                r"<(script|style)\\b[^>]*>.*?</\\1\\s*>",
+                r"<(script|style)\b[^>]*>.*?</\1\s*>",
                 "",
                 markup,
                 flags=re.IGNORECASE | re.DOTALL,

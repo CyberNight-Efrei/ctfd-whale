@@ -1,0 +1,269 @@
+/* Shared CTFd-Whale administration shell */
+.whale-admin-shell {
+    padding-bottom: 2.5rem;
+}
+
+.whale-admin-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+    margin: 1rem 0 1.25rem;
+    padding: 1.5rem 1.65rem;
+    border: 1px solid rgba(127, 127, 127, .24);
+    border-radius: .65rem;
+    background: var(--card-bg, rgba(127, 127, 127, .035));
+}
+
+.whale-admin-kicker {
+    margin: 0 0 .3rem;
+    color: var(--muted, #6c757d);
+    font-size: .76rem;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+}
+
+.whale-admin-header h1 {
+    margin: 0;
+    font-size: 1.8rem;
+    font-weight: 700;
+    letter-spacing: -.025em;
+}
+
+.whale-admin-header p.whale-admin-description {
+    margin: .35rem 0 0;
+    color: var(--muted, #6c757d);
+}
+
+.whale-admin-brand-icon {
+    display: inline-flex;
+    width: 3.1rem;
+    height: 3.1rem;
+    flex: 0 0 3.1rem;
+    align-items: center;
+    justify-content: center;
+    margin-right: 1rem;
+    border-radius: .6rem;
+    background: rgba(108, 117, 125, .12);
+    font-size: 1.25rem;
+}
+
+.whale-admin-brand {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.whale-admin-nav {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    margin-bottom: 1.5rem;
+    padding: .35rem;
+    border: 1px solid rgba(127, 127, 127, .24);
+    border-radius: .55rem;
+    background: var(--card-bg, rgba(127, 127, 127, .025));
+}
+
+.whale-admin-nav .whale-admin-nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .55rem;
+    padding: .65rem .95rem;
+    border: 1px solid transparent;
+    border-radius: .4rem;
+    color: inherit;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background-color .15s ease, border-color .15s ease;
+}
+
+.whale-admin-nav .whale-admin-nav-link:hover {
+    background: rgba(127, 127, 127, .08);
+}
+
+.whale-admin-nav .whale-admin-nav-link.active {
+    border-color: rgba(127, 127, 127, .25);
+    background: rgba(127, 127, 127, .12);
+}
+
+.whale-admin-nav .whale-admin-nav-link i {
+    width: 1rem;
+    text-align: center;
+}
+
+.whale-admin-page-title {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.15rem;
+}
+
+.whale-admin-page-title h2 {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 650;
+}
+
+.whale-admin-page-title p {
+    margin: .3rem 0 0;
+    color: var(--muted, #6c757d);
+}
+
+.whale-config-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+    margin: 0 0 1.25rem;
+    padding: .35rem;
+    border-bottom: 1px solid rgba(127, 127, 127, .25);
+}
+
+.whale-config-tabs .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .65rem .85rem;
+    border-radius: .35rem .35rem 0 0;
+    color: inherit;
+    font-weight: 600;
+}
+
+.whale-config-tabs .nav-link.active {
+    border-bottom: 2px solid var(--primary, #007bff);
+    background: rgba(127, 127, 127, .08);
+}
+
+.whale-config-tabs .nav-link i {
+    width: 1rem;
+    text-align: center;
+}
+
+.whale-config-panel {
+    padding: 1.25rem;
+    border: 1px solid rgba(127, 127, 127, .24);
+    border-radius: .55rem;
+    background: var(--card-bg, transparent);
+}
+
+.whale-config-panel .form-group {
+    margin-bottom: 1.15rem;
+}
+
+.whale-config-panel label {
+    font-weight: 600;
+}
+
+.whale-config-panel .form-text {
+    font-weight: 400;
+}
+
+.whale-config-panel .submit-row {
+    padding-top: 1rem;
+    border-top: 1px solid rgba(127, 127, 127, .2);
+}
+
+.whale-filter-panel {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border: 1px solid rgba(127, 127, 127, .24);
+    border-radius: .55rem;
+    background: var(--card-bg, rgba(127, 127, 127, .025));
+}
+
+.whale-filter-heading {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    margin-bottom: .8rem;
+    font-weight: 650;
+}
+
+.whale-filter-grid {
+    display: grid;
+    grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(145px, 1fr));
+    gap: .75rem;
+    align-items: end;
+}
+
+.whale-filter-grid label {
+    display: block;
+    margin-bottom: .35rem;
+    font-size: .84rem;
+    font-weight: 600;
+}
+
+.whale-filter-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: .5rem;
+    margin-top: .8rem;
+}
+
+.whale-filter-result-count {
+    color: var(--muted, #6c757d);
+    font-size: .85rem;
+}
+
+.whale-copy-button {
+    min-width: 2rem;
+}
+
+.whale-access-copy-source {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+@media (max-width: 991.98px) {
+    .whale-filter-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767.98px) {
+    .whale-admin-header {
+        padding: 1rem;
+    }
+
+    .whale-admin-header h1 {
+        font-size: 1.5rem;
+    }
+
+    .whale-admin-nav {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .whale-admin-nav .whale-admin-nav-link {
+        justify-content: center;
+        padding: .65rem .4rem;
+    }
+
+    .whale-config-panel {
+        padding: .85rem;
+    }
+
+    .whale-filter-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .whale-admin-page-title {
+        display: block;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .whale-admin-nav .whale-admin-nav-link {
+        transition: none;
+    }
+}

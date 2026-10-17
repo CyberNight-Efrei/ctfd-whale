@@ -476,7 +476,11 @@ class RedisCacheProvider(FlaskRedis):
         # Per-resource reservation keys have TTLs and expire automatically.
 
     def acquire_lock(self):
-        lock = self.lock(name=self.key, timeout=10)
+        # Provisioning can include slow image pulls. A 10-second lease could
+        # expire while the first request is still creating the instance, letting
+        # a second request tear down or replace resources mid-operation.
+        timeout = max(600, int(get_config("whale:docker_timeout", "3600")))
+        lock = self.lock(name=self.key, timeout=timeout)
         if not lock.acquire(blocking=True, blocking_timeout=2.0):
             return False
         self.current_lock = lock

@@ -87,6 +87,28 @@ class ControlUtil:
 
     @staticmethod
     def try_add_container(user_id, challenge_id):
+        lifecycle_lock = CacheProvider(app=current_app, user_id=user_id)
+        try:
+            if not lifecycle_lock.acquire_lifecycle_lock(user_id):
+                return False, "Another instance operation for this user is already in progress."
+        except Exception:
+            logging.exception("Unable to acquire lifecycle lock for user %s", user_id)
+            return False, "Unable to safely start an instance right now. Please retry."
+
+        try:
+            return ControlUtil._try_add_container_locked(user_id, challenge_id)
+        finally:
+            try:
+                lifecycle_lock.release_lifecycle_lock()
+            except Exception:
+                logging.exception("Unable to release lifecycle lock for user %s", user_id)
+
+    @staticmethod
+    def _try_add_container_locked(user_id, challenge_id):
+        if DBContainer.get_current_containers(user_id=user_id):
+            return False, (
+                "An instance already exists for this user. Clean it up before starting another."
+            )
         try:
             container = DBContainer.create_container_record(user_id, challenge_id)
         except ValueError as exc:
@@ -122,6 +144,9 @@ class ControlUtil:
 
         try:
             container.status = WhaleContainer.STATUS_STARTING
+            # Start the challenge lifetime after Docker provisioning, not while
+            # images are still being pulled and services are being created.
+            container.start_time = datetime.datetime.now()
             db.session.commit()
             ok, message = Router.register(container)
         except Exception as exc:
@@ -181,6 +206,24 @@ class ControlUtil:
 
     @staticmethod
     def try_remove_container(user_id):
+        lifecycle_lock = CacheProvider(app=current_app, user_id=user_id)
+        try:
+            if not lifecycle_lock.acquire_lifecycle_lock(user_id):
+                return False, "Another instance operation is in progress. Please retry shortly."
+        except Exception:
+            logging.exception("Unable to acquire lifecycle lock for user %s", user_id)
+            return False, "Unable to safely stop this instance right now. Please retry."
+
+        try:
+            return ControlUtil._try_remove_container_locked(user_id)
+        finally:
+            try:
+                lifecycle_lock.release_lifecycle_lock()
+            except Exception:
+                logging.exception("Unable to release lifecycle lock for user %s", user_id)
+
+    @staticmethod
+    def _try_remove_container_locked(user_id):
         container = DBContainer.get_current_containers(user_id=user_id)
         if not container:
             return False, "No such container"
@@ -189,6 +232,9 @@ class ControlUtil:
         # the stale STOPPING state lets the janitor resume cleanup later.
         try:
             container.status = WhaleContainer.STATUS_STOPPING
+            # Give a crashed teardown its own grace period before the janitor
+            # retries, instead of treating the original instance age as teardown age.
+            container.start_time = datetime.datetime.now()
             db.session.commit()
         except Exception:
             db.session.rollback()
@@ -235,6 +281,24 @@ class ControlUtil:
 
     @staticmethod
     def try_renew_container(user_id):
+        lifecycle_lock = CacheProvider(app=current_app, user_id=user_id)
+        try:
+            if not lifecycle_lock.acquire_lifecycle_lock(user_id):
+                return False, "Another instance operation is in progress. Please retry shortly."
+        except Exception:
+            logging.exception("Unable to acquire lifecycle lock for user %s", user_id)
+            return False, "Unable to safely renew this instance right now. Please retry."
+
+        try:
+            return ControlUtil._try_renew_container_locked(user_id)
+        finally:
+            try:
+                lifecycle_lock.release_lifecycle_lock()
+            except Exception:
+                logging.exception("Unable to release lifecycle lock for user %s", user_id)
+
+    @staticmethod
+    def _try_renew_container_locked(user_id):
         container = DBContainer.get_current_containers(user_id)
         if not container:
             return False, "No such container"

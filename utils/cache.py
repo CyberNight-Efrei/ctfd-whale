@@ -4,6 +4,7 @@ Redis is required for production multi-worker deployments. The filesystem/simple
 backend remains suitable only for local testing and is not a distributed lock.
 """
 import ipaddress
+import threading
 import warnings
 
 from CTFd.cache import cache
@@ -24,6 +25,9 @@ RESERVATION_TTL_SECONDS = 300
 
 
 class CacheProvider:
+    _lifecycle_locks = {}
+    _lifecycle_locks_guard = threading.Lock()
+
     def __init__(self, app, *args, **kwargs):
         cache_type = app.config.get("CACHE_TYPE", "simple")
         if cache_type == "redis":
@@ -198,6 +202,12 @@ class CacheProvider:
             )
             return False
 
+    def acquire_lifecycle_lock(self, user_id):
+        return self.provider.acquire_lifecycle_lock(user_id)
+
+    def release_lifecycle_lock(self):
+        return self.provider.release_lifecycle_lock()
+
     def __getattr__(self, name):
         return self.provider.__getattribute__(name)
 
@@ -216,6 +226,7 @@ class FilesystemCacheProvider:
         self.global_network_key = NETWORK_POOL_KEY
         self.port_reservation_key = PORT_POOL_KEY + "-reservations"
         self.network_reservation_key = NETWORK_POOL_KEY + "-reservations"
+        self.current_lifecycle_lock = None
 
     @staticmethod
     def _read_set(key):
@@ -298,6 +309,26 @@ class FilesystemCacheProvider:
             available.add(subnet)
         cache.set(self.global_network_key, available)
 
+    def acquire_lifecycle_lock(self, user_id):
+        # Protect multiple request threads inside this development process. This
+        # is not distributed; Redis is still required for multi-worker production.
+        with CacheProvider._lifecycle_locks_guard:
+            lock = CacheProvider._lifecycle_locks.setdefault(
+                str(user_id), threading.Lock()
+            )
+        if not lock.acquire(timeout=10):
+            return False
+        self.current_lifecycle_lock = lock
+        return True
+
+    def release_lifecycle_lock(self):
+        lock = self.current_lifecycle_lock
+        self.current_lifecycle_lock = None
+        if lock is None:
+            return False
+        lock.release()
+        return True
+
     def acquire_lock(self):
         return True
 
@@ -310,6 +341,7 @@ class RedisCacheProvider(FlaskRedis):
         super().__init__(app)
         self.key = "ctfd_whale_lock-" + str(kwargs.get("user_id", 0))
         self.current_lock = None
+        self.current_lifecycle_lock = None
         self.global_port_key = PORT_POOL_KEY
         self.global_network_key = NETWORK_POOL_KEY
 
@@ -475,10 +507,29 @@ class RedisCacheProvider(FlaskRedis):
         self.delete(self.global_port_key, self.global_network_key)
         # Per-resource reservation keys have TTLs and expire automatically.
 
+    def acquire_lifecycle_lock(self, user_id):
+        # All create/delete paths (including admin actions and the janitor) use
+        # one per-user lifecycle lock, independent of the rate-limit lock.
+        timeout = max(600, int(get_config("whale:docker_timeout", "3600")))
+        lock = self.lock(name=f"ctfd_whale_lifecycle-{user_id}", timeout=timeout)
+        if not lock.acquire(blocking=True, blocking_timeout=10.0):
+            return False
+        self.current_lifecycle_lock = lock
+        return True
+
+    def release_lifecycle_lock(self):
+        lock = self.current_lifecycle_lock
+        self.current_lifecycle_lock = None
+        if lock is None:
+            return False
+        try:
+            lock.release()
+            return True
+        except LockError:
+            return False
+
     def acquire_lock(self):
-        # Provisioning can include slow image pulls. A 10-second lease could
-        # expire while the first request is still creating the instance, letting
-        # a second request tear down or replace resources mid-operation.
+        # The rate-limit lock is independent from the per-user lifecycle lock.
         timeout = max(600, int(get_config("whale:docker_timeout", "3600")))
         lock = self.lock(name=self.key, timeout=timeout)
         if not lock.acquire(blocking=True, blocking_timeout=2.0):

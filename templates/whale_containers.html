@@ -11,6 +11,7 @@
                     <span class="badge badge-light border"><i class="fas fa-layer-group mr-1" aria-hidden="true"></i> {{ total_count }} matching instance{{ '' if total_count == 1 else 's' }}</span>
                     <span class="badge badge-light border"><i class="fas fa-file-alt mr-1" aria-hidden="true"></i> Page {{ curr_page }} of {{ [pages, 1]|max }}</span>
                     {% if containers %}
+                        <span class="whale-status-summary-label">Visible page:</span>
                         <span class="whale-status-badge whale-status-running" title="Instances whose current Swarm tasks are running"><span class="whale-status-dot" aria-hidden="true"></span>{{ status_counts.running }} Running</span>
                         <span class="whale-status-badge whale-status-starting" title="Instances with pending or starting Swarm tasks"><span class="whale-status-dot" aria-hidden="true"></span>{{ status_counts.starting }} Starting</span>
                         {% set attention_count = status_counts.degraded + status_counts.error + status_counts.missing %}

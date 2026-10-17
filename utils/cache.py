@@ -227,7 +227,7 @@ class RedisCacheProvider(FlaskRedis):
         self.global_network_key = NETWORK_POOL_KEY
 
     def _pool_lock(self):
-        lock = self.lock(name=POOL_LOCK_KEY, timeout=30)
+        lock = self.lock(name=POOL_LOCK_KEY, timeout=120)
         if not lock.acquire(blocking=True, blocking_timeout=10):
             return None
         return lock

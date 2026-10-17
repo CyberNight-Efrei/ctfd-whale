@@ -36,14 +36,18 @@ class TrpRouter(BaseRouter):
 
     def register(self, container: WhaleContainer):
         try:
-            resp = self.ses.post(f'{self.url}/rule/{self.get_domain(container)}', json={
-                'target': f'{container.user_id}-{container.uuid}:{container.challenge.redirect_port}',
-                'source': None,
-            })
+            resp = self.ses.post(
+                f'{self.url}/rule/{self.get_domain(container)}',
+                json={
+                    'target': f'{container.user_id}-{container.uuid}:{container.challenge.redirect_port}',
+                    'source': None,
+                },
+                timeout=5,
+            )
             resp.raise_for_status()
             return True, 'success'
         except HTTPError as e:
-            return False, e.response.text
+            return False, e.response.text if e.response is not None else str(e)
         except RequestException as e:
             print(traceback.format_exc())
             return False, 'unable to access trp Api'
@@ -67,7 +71,9 @@ class TrpRouter(BaseRouter):
 
     def check_availability(self):
         try:
-            resp = self.ses.get(f'{self.url}/rules', timeout=2).json()
+            response = self.ses.get(f'{self.url}/rules', timeout=2)
+            response.raise_for_status()
+            response.json()
         except RequestException as e:
             return False, 'Unable to access trp admin api'
         except Exception as e:

@@ -1,8 +1,11 @@
 import datetime
 
-from CTFd.models import db
+from sqlalchemy import String, cast, or_
+
+from CTFd.models import Users, db
 from CTFd.utils import get_config
 from ..models import (
+    DynamicDockerChallenge,
     DynamicDockerChallengePort,
     WhaleContainer,
     WhaleContainerPort,
@@ -138,6 +141,98 @@ class DBContainer:
             >= datetime.datetime.now() - datetime.timedelta(seconds=timeout)
         )
         return q.count()
+
+    @staticmethod
+    def get_admin_instance_page(
+        page=1, per_page=20, search="", node="", challenge_id="", protocol=""
+    ):
+        """Return a filtered, paginated set of live instances for the admin UI.
+
+        Filtering happens in SQL before pagination, so a search spans every page
+        rather than only the rows currently rendered in the browser.
+        """
+        timeout = int(get_config("whale:docker_timeout", "3600"))
+        alive_since = datetime.datetime.now() - datetime.timedelta(seconds=timeout)
+        q = db.session.query(WhaleContainer).filter(
+            WhaleContainer.start_time >= alive_since
+        )
+
+        search = (search or "").strip()
+        if search:
+            pattern = f"%{search}%"
+            search_conditions = [
+                WhaleContainer.uuid.ilike(pattern),
+                WhaleContainer.node.ilike(pattern),
+                WhaleContainer.user.has(Users.name.ilike(pattern)),
+                WhaleContainer.challenge.has(DynamicDockerChallenge.name.ilike(pattern)),
+                WhaleContainer.port_mappings.any(
+                    or_(
+                        WhaleContainerPort.name.ilike(pattern),
+                        cast(WhaleContainerPort.internal_port, String).ilike(pattern),
+                        cast(WhaleContainerPort.public_port, String).ilike(pattern),
+                    )
+                ),
+            ]
+            if search.isdigit():
+                numeric_search = int(search)
+                search_conditions.extend([
+                    WhaleContainer.id == numeric_search,
+                    WhaleContainer.user_id == numeric_search,
+                    WhaleContainer.challenge_id == numeric_search,
+                ])
+            q = q.filter(or_(*search_conditions))
+
+        if node:
+            q = q.filter(WhaleContainer.node == node)
+
+        if challenge_id:
+            try:
+                q = q.filter(WhaleContainer.challenge_id == int(challenge_id))
+            except (TypeError, ValueError):
+                # Ignore malformed filter values rather than breaking the page.
+                pass
+
+        if protocol in ("http", "tcp", "ssh"):
+            q = q.filter(
+                WhaleContainer.port_mappings.any(WhaleContainerPort.protocol == protocol)
+            )
+
+        total = q.count()
+        pages = (total + per_page - 1) // per_page if total else 0
+        offset = max(page - 1, 0) * per_page
+        items = (
+            q.order_by(WhaleContainer.start_time.desc(), WhaleContainer.id.desc())
+            .offset(offset)
+            .limit(per_page)
+            .all()
+        )
+        return items, total, pages
+
+    @staticmethod
+    def get_admin_instance_filter_options():
+        """Get filter options from instances that have not yet expired."""
+        timeout = int(get_config("whale:docker_timeout", "3600"))
+        alive_since = datetime.datetime.now() - datetime.timedelta(seconds=timeout)
+        alive_filter = WhaleContainer.start_time >= alive_since
+
+        nodes = [
+            row[0] for row in
+            db.session.query(WhaleContainer.node)
+            .filter(alive_filter, WhaleContainer.node.isnot(None), WhaleContainer.node != "")
+            .distinct()
+            .order_by(WhaleContainer.node)
+            .all()
+        ]
+
+        challenges = (
+            db.session.query(DynamicDockerChallenge.id, DynamicDockerChallenge.name)
+            .join(WhaleContainer, WhaleContainer.challenge_id == DynamicDockerChallenge.id)
+            .filter(alive_filter)
+            .distinct()
+            .order_by(DynamicDockerChallenge.name)
+            .all()
+        )
+        return nodes, challenges
 
 
 class DBRedirectTemplate:

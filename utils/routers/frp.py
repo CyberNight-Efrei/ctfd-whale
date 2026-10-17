@@ -128,33 +128,33 @@ class FrpRouter(BaseRouter):
                 cards.append(
                     f'<li><strong>{name}</strong> — '
                     f'<a target="_blank" rel="noopener noreferrer" href="{html.escape(href, quote=True)}">'
-                    f'{html.escape(host_display)}</a> (HTTP, internal port {mapping.internal_port})</li>'
+                    f'{html.escape(host_display)}</a> (HTTP)</li>'
                 )
                 rows.append((name, "HTTP", str(mapping.internal_port), host_display))
             elif mapping.protocol == "ssh":
                 public_port = mapping.public_port
                 user = html.escape(str(container.challenge.user or "user"))
-                command = f"ssh {container.challenge.user or 'user'}@{host} -p {public_port}"
+                command = f"ssh {container.challenge.user or 'user'}@{safe_host} -p {public_port}"
                 safe_command = html.escape(command)
                 cards.append(
                     f'<li><strong>{name}</strong> — <code class="click-copy">{safe_command}</code>'
-                    f' (SSH, internal port {mapping.internal_port})</li>'
+                    f' (SSH)</li>'
                 )
                 rows.append((name, "SSH", str(mapping.internal_port), str(public_port or "")))
             else:
                 public_port = mapping.public_port
-                command = f"nc {host} {public_port}"
+                command = f"nc {safe_host} {public_port}"
                 safe_command = html.escape(command)
                 cards.append(
                     f'<li><strong>{name}</strong> — <code class="click-copy">{safe_command}</code>'
-                    f' (TCP, internal port {mapping.internal_port})</li>'
+                    f' (TCP)</li>'
                 )
                 rows.append((name, "TCP", str(mapping.internal_port), str(public_port or "")))
 
         challenge_data = {
             "User": container.challenge.user,
             "Password": container.challenge.password,
-            "Direct host": host,
+            "Direct host": safe_host,
         }
         detail_rows = []
         for key, value in challenge_data.items():
@@ -165,7 +165,7 @@ class FrpRouter(BaseRouter):
                 )
 
         return (
-            '<div class="whale-port-access"><h6>Available services</h6><ul>'
+            '<div class="whale-port-access"><h6><u>Available services</u></h6><ul class="text-start">'
             + "".join(cards)
             + "</ul>"
             + (
@@ -174,7 +174,10 @@ class FrpRouter(BaseRouter):
                 if detail_rows else ""
             )
             + "</div>"
-            + "<style>.click-copy{cursor:pointer}.click-copy:hover{filter:brightness(50%)}</style>"
+            + "<style>"
+            + ".click-copy{cursor:pointer}.click-copy:hover{filter:brightness(50%)}"
+            + ".text-start{text-align:start}"
+            + "</style>"
             + "<script>(function(){document.querySelectorAll('.click-copy').forEach(function(el){"
               "if(!el.dataset.whaleCopyBound){el.dataset.whaleCopyBound='1';el.addEventListener('click',function(){"
               "navigator.clipboard.writeText(el.textContent).then(function(){"

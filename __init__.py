@@ -26,7 +26,12 @@ from .utils.setup import setup_default_configs
 from .utils.routers import Router
 
 
+# Keep the scheduler lock file open for the process lifetime.
+_scheduler_lock_file = None
+
+
 def load(app):
+    global _scheduler_lock_file
     app.config['RESTX_ERROR_404_HELP'] = False
     # upgrade()
     plugin_name = __name__.split('.')[-1]
@@ -182,19 +187,24 @@ def load(app):
     except Exception:
         warnings.warn("Initialization Failed. Please check your configs.", WhaleWarning)
 
+    lock_file = None
     try:
         lock_file = open("/tmp/ctfd_whale.lock", "w")
-        lock_fd = lock_file.fileno()
-        fcntl.lockf(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
+        fcntl.lockf(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except IOError:
+        if lock_file is not None:
+            lock_file.close()
+    else:
+        _scheduler_lock_file = lock_file
         scheduler = APScheduler()
         scheduler.init_app(app)
         scheduler.start()
         scheduler.add_job(
-            id='whale-auto-clean', func=auto_clean_container,
-            trigger="interval", seconds=10
+            id='whale-auto-clean',
+            func=auto_clean_container,
+            trigger="interval",
+            seconds=10,
+            max_instances=1,
+            coalesce=True,
         )
-
         print("[CTFd Whale] Started successfully")
-    except IOError:
-        pass

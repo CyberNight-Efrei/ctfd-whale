@@ -11,7 +11,7 @@ docker swarm init
 docker node update --label-add='name=linux-1' $(docker node ls -q)
 
 git clone https://github.com/CTFd/CTFd --depth=1
-git clone https://github.com/frankli0324/ctfd-whale CTFd/CTFd/plugins/ctfd-whale --depth=1
+git clone https://github.com/CyberNight-Efrei/ctfd-whale CTFd/CTFd/plugins/ctfd-whale --depth=1
 curl -fsSL https://cdn.jsdelivr.net/gh/frankli0324/ctfd-whale/docker-compose.example.yml -o CTFd/docker-compose.yml
 
 # make sure you have pip3 installed on your rig
@@ -189,7 +189,17 @@ CTFd/
 
 ### Configure CTFd
 
-After finishing everything above:
+After finishing everything above, configure the Docker API URL in Whale's Docker settings.
+
+For a CTFd instance controlling a Docker daemon on the same host, prefer the Unix socket:
+
+```text
+unix:///var/run/docker.sock
+```
+
+The example Compose file already mounts `/var/run/docker.sock` into the CTFd container. Keep the socket mount read/write as required by the Docker SDK, restrict access to the CTFd container, and remember that access to this socket is effectively root-equivalent on the Docker host.
+
+For a remote Docker host, use the Docker API over TLS with client certificate verification (normally port 2376) and set Whale's SSL certificate fields accordingly. Do not expose an unauthenticated, unencrypted Docker TCP endpoint such as `tcp://0.0.0.0:2375`.
 
 * map docker socket into CTFd container
 * Attach CTFd container to frp_connect
@@ -210,7 +220,7 @@ services:
 and then clone Whale into CTFd plugins directory (yes, finally)
 
 ```bash
-git clone https://github.com/frankli0324/CTFd-Whale CTFd/plugins/ctfd-whale --depth=1
+git clone https://github.com/CyberNight-Efrei/ctfd-whale CTFd/plugins/ctfd-whale --depth=1
 docker-compose build # for pip to find requirements.txt
 docker-compose up -d
 ```

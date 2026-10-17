@@ -54,6 +54,10 @@ class TrpRouter(BaseRouter):
             resp.raise_for_status()
             return True, 'success'
         except HTTPError as e:
+            # Deleting an already absent route is idempotent and should not block
+            # Docker cleanup forever.
+            if e.response is not None and e.response.status_code == 404:
+                return True, 'already absent'
             return False, e.response.text
         except RequestException as e:
             print(traceback.format_exc())

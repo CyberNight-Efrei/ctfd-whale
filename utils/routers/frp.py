@@ -214,6 +214,10 @@ class FrpRouter(BaseRouter):
                 if mapping.protocol in ("tcp", "ssh") and not mapping.public_port:
                     port = cache.get_available_port()
                     if not port:
+                        # Discard the uncommitted mapping edits before returning
+                        # reservations, otherwise the DB identity map can make a
+                        # just-reserved port look persisted and in use.
+                        db.session.rollback()
                         for allocated_port in allocated:
                             cache.add_available_port(allocated_port)
                         return False, "No available public ports. Please wait or increase the FRP port range."

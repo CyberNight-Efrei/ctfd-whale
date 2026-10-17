@@ -94,7 +94,16 @@ class UserContainers(Resource):
     @frequency_limited
     def post():
         user_id = current_user.get_current_user().id
-        ControlUtil.try_remove_container(user_id)
+        existing_container = DBContainer.get_current_containers(user_id=user_id)
+        if existing_container:
+            removed, message = ControlUtil.try_remove_container(user_id)
+            if not removed:
+                abort(
+                    503,
+                    "The previous instance could not be cleaned up safely. "
+                    f"Please retry shortly. Details: {message}",
+                    success=False,
+                )
 
         current_count = DBContainer.get_all_alive_container_count()
         if int(get_config("whale:docker_max_container_count")) <= int(current_count):

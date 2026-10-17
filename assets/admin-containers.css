@@ -497,3 +497,9 @@
     font-size: .78rem;
     font-weight: 650;
 }
+
+.whale-status-stopped {
+    color: #626a71;
+    background: rgba(108, 117, 125, .1);
+    border-color: rgba(108, 117, 125, .27);
+}

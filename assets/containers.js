@@ -17,10 +17,10 @@ function htmlToPlainText(markup) {
         element.insertAdjacentText("afterend", "\n");
     });
     return wrapper.textContent
-        .replace(/\\u00a0/g, " ")
-        .replace(/[ \\t]+/g, " ")
-        .replace(/ *\\n */g, "\n")
-        .replace(/\\n{2,}/g, "\n")
+        .replace(/\u00a0/g, " ")
+        .replace(/[ \t]+/g, " ")
+        .replace(/ *\n */g, "\n")
+        .replace(/\n{2,}/g, "\n")
         .trim();
 }
 

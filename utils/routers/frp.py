@@ -231,7 +231,13 @@ class FrpRouter(BaseRouter):
                         # identity map can make a reservation look persisted/in use.
                         db.session.rollback()
                         for allocated_port in allocated:
-                            cache.add_available_port(allocated_port)
+                            try:
+                                cache.return_port_reservation(allocated_port)
+                            except Exception:
+                                logging.exception(
+                                    "Unable to release reserved public port %s after allocation failure",
+                                    allocated_port,
+                                )
                         return False, "No available public ports. Please wait or increase the FRP port range."
                     mapping.public_port = int(port)
                     allocated.append(int(port))
@@ -277,10 +283,14 @@ class FrpRouter(BaseRouter):
             for allocated_port in allocated:
                 try:
                     if mappings_cleared:
-                        cache.add_available_port(allocated_port)
+                        # Return the port and clear only this operation's lease
+                        # atomically. A stale request must not release a newer
+                        # allocation that happens to reuse the same port.
+                        cache.return_port_reservation(allocated_port)
                     else:
-                        # The DB mapping still owns this port; release only the
-                        # temporary lease so reconciliation can rely on the DB.
+                        # The DB mapping still owns this port; release only this
+                        # operation's temporary lease so reconciliation can rely
+                        # on the durable database ownership record.
                         cache.commit_port_reservation(allocated_port)
                 except Exception:
                     logging.exception(

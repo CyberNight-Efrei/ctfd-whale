@@ -235,7 +235,9 @@ class DockerUtils:
 
             if cleanup_complete:
                 try:
-                    cache_provider.add_available_network_range(range_prefix)
+                    # Remove only this request's reservation and return the
+                    # subnet atomically after Docker confirms cleanup.
+                    cache_provider.return_network_reservation(range_prefix)
                 except Exception:
                     logging.exception("Failed returning subnet %s to the pool", range_prefix)
             # If cleanup could not be confirmed, keep the allocation reserved.

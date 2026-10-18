@@ -176,6 +176,15 @@ class DBContainer:
         return db.session.query(WhaleContainer).all()
 
     @staticmethod
+    def get_all_container_count():
+        """Count every persisted instance, including entries awaiting cleanup.
+
+        Cleanup-pending rows still represent allocated resources and must continue
+        to consume the configured global capacity until their resources are gone.
+        """
+        return db.session.query(WhaleContainer).count()
+
+    @staticmethod
     def get_all_alive_container_page(page_start, page_end):
         timeout = int(get_config("whale:docker_timeout", "3600"))
         q = db.session.query(WhaleContainer)

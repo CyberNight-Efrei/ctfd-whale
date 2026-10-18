@@ -1,25 +1,36 @@
 {% extends "admin/base.html" %}
 
 {% block content %}
-    <div class="jumbotron">
-        <div class="container">
-            <h1>CTFd Whale</h1>
-        </div>
-    </div>
-    <div class="container">
-        <div class="row">
-            <div class="col-md-3">
-                <ul class="nav nav-pills flex-column">
-                    {% block menu %}
-                    {% endblock %}
-                </ul>
-            </div>
-            <div class="col-md-9">
-                <div class="tab-content">
-                    {% block panel %}
-                    {% endblock %}
+    <link rel="stylesheet" href="{{ url_for('plugins.ctfd-whale.assets', path='admin-whale.css') }}">
+    <main class="container whale-admin-shell">
+        <header class="whale-admin-header">
+            <div class="whale-admin-brand">
+                <div class="whale-admin-brand-icon" aria-hidden="true">
+                    <i class="fas fa-water"></i>
+                </div>
+                <div>
+                    <p class="whale-admin-kicker">CTFd plugin</p>
+                    <h1>Whale</h1>
+                    <p class="whale-admin-description">Dynamic challenge infrastructure</p>
                 </div>
             </div>
-        </div>
-    </div>
+        </header>
+
+        <nav class="whale-admin-nav" aria-label="Whale administration">
+            <a class="whale-admin-nav-link{{ ' active' if request.path.endswith('/admin/settings') else '' }}"
+               href="/plugins/ctfd-whale/admin/settings"
+               {% if request.path.endswith('/admin/settings') %}aria-current="page"{% endif %}>
+                <i class="fas fa-sliders-h" aria-hidden="true"></i>
+                <span>Settings</span>
+            </a>
+            <a class="whale-admin-nav-link{{ ' active' if request.path.endswith('/admin/containers') else '' }}"
+               href="/plugins/ctfd-whale/admin/containers"
+               {% if request.path.endswith('/admin/containers') %}aria-current="page"{% endif %}>
+                <i class="fas fa-cubes" aria-hidden="true"></i>
+                <span>Instances</span>
+            </a>
+        </nav>
+
+        {% block panel %}{% endblock %}
+    </main>
 {% endblock %}

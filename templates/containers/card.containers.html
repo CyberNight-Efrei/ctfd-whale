@@ -1,59 +1,87 @@
-<style>
-    .info-card.card {
-        height: 11rem;
-    }
-
-    .card-text {
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        overflow: hidden;
-    }
-
-    .card-text:hover {
-        white-space: pre-line;
-        overflow: visible;
-    }
-</style>
-
-<div class="row">
+<div class="row whale-instance-cards">
     {% for container in containers %}
-        <div class="col-sm-6 pb-3">
-            <div class="info-card card">
+        <div class="col-xl-6 col-lg-6 col-md-12 pb-3">
+            <article class="card whale-instance-card">
                 <div class="card-body">
-                    <h5 class="d-inline-block card-title">
-                        <a style="width: 5rem;"
-                           href="{{ url_for('admin.challenges_detail', challenge_id=container.challenge.id) }}"
-                        >{{ container.challenge.name | truncate(15) }}
-                        </a>
-                    </h5>
-                    <h6 class="d-inline-block card-subtitle float-right">
-                        <a style="width: 5rem;"
-                           class="btn btn-outline-secondary rounded"
-                           href="{{ url_for('admin.users_detail', user_id=container.user.id) }}"
-                        >{{ container.user.name | truncate(5) }}
-                        </a>
-                    </h6>
-                    <p class="card-text">Node : {{ container.node }}</p>
-                    <p class="card-text">{{ container.uuid }}</p>
-                    <p class="card-text">{{ container.user_access }}</p>
-                    <p class="card-text">{{ container.flag }}</p>
-                    Time Started: {{ container.start_time }}
-                    <a class="delete-container float-right" container-id="{{ container.id }}"
-                       data-toggle="tooltip" data-placement="top"
-                       user-id="{{ container.user.id }}"
-                       style="margin-right: 0.5rem;"
-                       title="Destroy Container #{{ container.id }}">
-                        <i class="fas fa-stop-circle"></i>
+                    <header class="whale-instance-card-header">
+                        <div>
+                            <h3><a href="{{ url_for('admin.challenges_detail', challenge_id=container.challenge.id) }}">{{ container.challenge.name }}</a></h3>
+                            <span class="text-muted small">Instance #{{ container.id }}</span>
+                        </div>
+                        <span class="badge badge-light border whale-instance-id">{{ container.renew_count }} renewal{{ '' if container.renew_count == 1 else 's' }}</span>
+                    </header>
+
+                    {% set runtime_status = instance_statuses[container.id] %}
+                    <div class="whale-instance-card-status">
+                        <span class="whale-status-badge whale-status-{{ runtime_status.state }}" title="{{ runtime_status.detail }}" aria-label="Swarm status: {{ runtime_status.label }}">
+                            <span class="whale-status-dot" aria-hidden="true"></span>{{ runtime_status.label }}
+                        </span>
+                        {% if runtime_status.services_expected > 1 %}
+                            <small class="whale-status-detail">{{ runtime_status.services_found }}/{{ runtime_status.services_expected }} services</small>
+                        {% endif %}
+                        <small class="whale-status-context">Based on Docker Swarm task state, not application health.</small>
+                    </div>
+
+                    <a class="btn btn-sm btn-outline-secondary whale-instance-card-user" href="{{ url_for('admin.users_detail', user_id=container.user.id) }}">
+                        <i class="fas fa-user mr-1" aria-hidden="true"></i>{{ container.user.name }}
                     </a>
-                    <a class="renew-container float-right" container-id="{{ container.id }}"
-                       data-toggle="tooltip" data-placement="top"
-                       user-id="{{ container.user.id }}"
-                       style="margin-right: 0.5rem;"
-                       title="Renew Container #{{ container.id }}">
-                        <i class="fas fa-clock"></i>
-                    </a>
+
+                    <div class="whale-instance-card-meta">
+                        <div>
+                            <small>Node</small>
+                            <div class="whale-instance-card-value">{{ container.node or 'Not assigned' }}</div>
+                        </div>
+                        <div>
+                            <small>Started</small>
+                            <div class="whale-instance-card-value"><span data-time="{{ container.start_time | isoformat }}"></span></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <small class="text-muted d-block mb-1">Instance UUID</small>
+                        <div class="whale-instance-card-uuid">
+                            <span>{{ container.uuid | truncate(16, True, '…') }}</span>
+                            <button type="button" class="btn btn-sm btn-link click-copy" data-copy="{{ container.uuid }}" title="Copy UUID" aria-label="Copy instance UUID">
+                                <i class="fas fa-copy" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <small class="text-muted d-block mb-1">Ports</small>
+                        <div class="whale-instance-card-ports">
+                            {% for port in container.port_mappings %}
+                                <span class="badge badge-light border whale-port-badge">
+                                    <span class="whale-port-name">{{ port.name }}</span>
+                                    <span class="whale-port-detail">{{ port.protocol|upper }} · {{ port.internal_port }}{% if port.public_port %} → {{ port.public_port }}{% endif %}</span>
+                                </span>
+                            {% else %}
+                                <span class="text-muted small">No port mapping available</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div>
+                        <small class="text-muted d-block mb-1">Connection details</small>
+                        <div class="whale-instance-card-access">{{ access_details[container.id] | safe }}</div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary click-copy mt-2" data-copy-html="{{ access_details[container.id] }}">
+                            <i class="fas fa-copy mr-1" aria-hidden="true"></i>Copy access
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary click-copy mt-2" data-copy="{{ container.flag }}" title="Copy flag">
+                            <i class="fas fa-flag mr-1" aria-hidden="true"></i>Copy flag
+                        </button>
+                    </div>
+
+                    <footer class="whale-instance-card-actions">
+                        <button type="button" class="btn btn-sm btn-outline-secondary renew-container" container-id="{{ container.id }}" data-toggle="tooltip" data-placement="top" user-id="{{ container.user.id }}" title="Renew instance #{{ container.id }}" aria-label="Renew instance {{ container.id }}">
+                            <i class="fas fa-sync-alt mr-1" aria-hidden="true"></i>Renew
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-container" container-id="{{ container.id }}" data-toggle="tooltip" data-placement="top" user-id="{{ container.user.id }}" title="Stop instance #{{ container.id }}" aria-label="Stop instance {{ container.id }}">
+                            <i class="fas fa-stop-circle mr-1" aria-hidden="true"></i>Stop
+                        </button>
+                    </footer>
                 </div>
-            </div>
+            </article>
         </div>
     {% endfor %}
 </div>

@@ -1,4 +1,5 @@
 import fcntl
+import re
 import warnings
 
 import requests
@@ -82,15 +83,90 @@ def load(app):
     @page_blueprint.route("/admin/containers")
     @admins_only
     def admin_list_containers():
-        result = AdminContainers.get()
+        # This page adds presentation-only filters; the existing admin API and
+        # all instance lifecycle endpoints remain unchanged.
         view_mode = request.args.get('mode', session.get('view_mode', 'list'))
+        if view_mode not in ('list', 'card'):
+            view_mode = 'list'
         session['view_mode'] = view_mode
-        return render_template("whale_containers.html",
-                               plugin_name=plugin_name,
-                               containers=result['data']['containers'],
-                               pages=result['data']['pages'],
-                               curr_page=abs(request.args.get("page", 1, type=int)),
-                               curr_page_start=result['data']['page_start'])
+
+        search_term = request.args.get('q', '').strip()[:200]
+        node_filter = request.args.get('node', '').strip()
+        challenge_filter = request.args.get('challenge_id', '').strip()
+        protocol_filter = request.args.get('protocol', '').strip().lower()
+        if protocol_filter not in ('http', 'tcp', 'ssh'):
+            protocol_filter = ''
+
+        per_page = request.args.get('per_page', 20, type=int)
+        if per_page not in (20, 50, 100):
+            per_page = 20
+        curr_page = max(request.args.get('page', 1, type=int), 1)
+
+        containers, total_count, pages = DBContainer.get_admin_instance_page(
+            page=curr_page,
+            per_page=per_page,
+            search=search_term,
+            node=node_filter,
+            challenge_id=challenge_filter,
+            protocol=protocol_filter,
+        )
+        if pages and curr_page > pages:
+            curr_page = pages
+            containers, total_count, pages = DBContainer.get_admin_instance_page(
+                page=curr_page,
+                per_page=per_page,
+                search=search_term,
+                node=node_filter,
+                challenge_id=challenge_filter,
+                protocol=protocol_filter,
+            )
+
+        nodes, challenges = DBContainer.get_admin_instance_filter_options()
+
+        # Read-only runtime inspection: show what Swarm currently reports,
+        # rather than assuming a database row means that an instance is running.
+        instance_statuses = DockerUtils.get_instance_statuses(containers)
+        status_counts = {
+            state: sum(
+                1 for item in instance_statuses.values()
+                if item.get("state") == state
+            )
+            for state in ("running", "starting", "stopped", "degraded", "error", "missing", "unknown")
+        }
+
+        # Router.access() returns HTML intended to be embedded in the challenge
+        # page. For admin templates, strip its inline script/style blocks: the
+        # admin page owns copy behavior and styles, so embedded scripts would
+        # otherwise double-bind clipboard handlers.
+        access_details = {}
+        for container in containers:
+            markup = container.user_access or ""
+            markup = re.sub(
+                r"<(script|style)\b[^>]*>.*?</\1\s*>",
+                "",
+                markup,
+                flags=re.IGNORECASE | re.DOTALL,
+            )
+            access_details[container.id] = markup
+
+        return render_template(
+            "whale_containers.html",
+            plugin_name=plugin_name,
+            containers=containers,
+            pages=pages,
+            curr_page=curr_page,
+            per_page=per_page,
+            total_count=total_count,
+            search_term=search_term,
+            node_filter=node_filter,
+            challenge_filter=challenge_filter,
+            protocol_filter=protocol_filter,
+            nodes=nodes,
+            challenges=challenges,
+            access_details=access_details,
+            instance_statuses=instance_statuses,
+            status_counts=status_counts,
+        )
 
     def auto_clean_container():
         with app.app_context():

@@ -76,44 +76,62 @@ class FrpRouter(BaseRouter):
         return rules
 
     def reload(self, exclude=None):
-        rules = []
-        for container in DBContainer.get_routable_containers():
-            if container.uuid == exclude:
-                continue
-            rules.extend(self._rules_for_container(container))
+        route_lock = CacheProvider(app=current_app)
+        if not route_lock.acquire_router_reload_lock():
+            raise WhaleError(
+                "Another FRP routing update is in progress. Please retry shortly."
+            )
 
         try:
-            if not self.common:
-                common = get_config("whale:frp_config_template", "")
-                if "[common]" in common:
-                    self.common = common
-                else:
-                    remote = self.ses.get(f"{self.url}/api/config", timeout=5)
-                    if remote.status_code != 200:
-                        raise RequestException(
-                            f"FRP config endpoint returned HTTP {remote.status_code}"
-                        )
-                    set_config("whale:frp_config_template", remote.text)
-                    self.common = remote.text
-            config = self.common + "\n" + "\n".join(str(rule) for rule in rules)
-            update_response = self.ses.put(
-                f"{self.url}/api/config", config, timeout=5
-            )
-            if update_response.status_code != 200:
-                raise RequestException(
-                    f"FRP config update returned HTTP {update_response.status_code}"
+            # FRP's API replaces the entire configuration. Build the snapshot only
+            # after taking the cross-worker lock, and omit stopping/cleanup-pending
+            # instances so a concurrent reload cannot reintroduce their routes.
+            rules = []
+            for container in DBContainer.get_routable_containers(include_starting=True):
+                if container.uuid == exclude:
+                    continue
+                rules.extend(self._rules_for_container(container))
+
+            try:
+                if not self.common:
+                    common = get_config("whale:frp_config_template", "")
+                    if "[common]" in common:
+                        self.common = common
+                    else:
+                        remote = self.ses.get(f"{self.url}/api/config", timeout=5)
+                        if remote.status_code != 200:
+                            raise RequestException(
+                                f"FRP config endpoint returned HTTP {remote.status_code}"
+                            )
+                        set_config("whale:frp_config_template", remote.text)
+                        self.common = remote.text
+                config = self.common + "\n" + "\n".join(str(rule) for rule in rules)
+                update_response = self.ses.put(
+                    f"{self.url}/api/config", config, timeout=5
                 )
-            reload_response = self.ses.get(f"{self.url}/api/reload", timeout=5)
-            if reload_response.status_code != 200:
-                raise RequestException(
-                    f"FRP reload returned HTTP {reload_response.status_code}"
+                if update_response.status_code != 200:
+                    raise RequestException(
+                        f"FRP config update returned HTTP {update_response.status_code}"
+                    )
+                reload_response = self.ses.get(f"{self.url}/api/reload", timeout=5)
+                if reload_response.status_code != 200:
+                    raise RequestException(
+                        f"FRP reload returned HTTP {reload_response.status_code}"
+                    )
+            except RequestException as exc:
+                raise WhaleError(
+                    "\nfrpc request failed\n"
+                    + (f"{exc}\n" if str(exc) else "")
+                    + "please check the frp related configs"
+                ) from None
+        finally:
+            try:
+                route_lock.release_router_reload_lock()
+            except Exception as exc:
+                warnings.warn(
+                    f"[CTFd-Whale] Unable to release FRP routing lock: {exc}",
+                    RuntimeWarning,
                 )
-        except RequestException as exc:
-            raise WhaleError(
-                "\nfrpc request failed\n"
-                + (f"{exc}\n" if str(exc) else "")
-                + "please check the frp related configs"
-            ) from None
 
     def access(self, container: WhaleContainer):
         mappings = list(container.port_mappings)

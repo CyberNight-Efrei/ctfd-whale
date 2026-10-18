@@ -1,6 +1,6 @@
 import datetime
 
-from sqlalchemy import String, cast, or_
+from sqlalchemy import String, and_, cast, or_
 
 from CTFd.models import Users, db
 from CTFd.utils import get_config
@@ -109,6 +109,37 @@ class DBContainer:
         return q.all()
 
     @staticmethod
+    def get_all_cleanup_candidates():
+        """Find expired instances and stale in-progress lifecycle transitions."""
+        now = datetime.datetime.now()
+        timeout = int(get_config("whale:docker_timeout", "3600"))
+        provisioning_timeout = max(
+            60, int(get_config("whale:docker_provisioning_timeout", "600"))
+        )
+        expired_before = now - datetime.timedelta(seconds=timeout)
+        stale_before = now - datetime.timedelta(seconds=provisioning_timeout)
+        # Only stale teardown states are retried by age. A provisioning or
+        # starting request may still be legitimately working; those states are
+        # cleaned after the normal instance timeout if the worker crashed.
+        transitional_states = (
+            # start_time is reset when Docker provisioning ends and route setup
+            # begins, so a crashed STARTING operation can be retried after grace.
+            WhaleContainer.STATUS_STARTING,
+            WhaleContainer.STATUS_STOPPING,
+            WhaleContainer.STATUS_CLEANUP_PENDING,
+        )
+        q = db.session.query(WhaleContainer).filter(
+            or_(
+                WhaleContainer.start_time < expired_before,
+                and_(
+                    WhaleContainer.status.in_(transitional_states),
+                    WhaleContainer.start_time < stale_before,
+                ),
+            )
+        )
+        return q.order_by(WhaleContainer.start_time.asc()).all()
+
+    @staticmethod
     def get_all_alive_container():
         timeout = int(get_config("whale:docker_timeout", "3600"))
         q = db.session.query(WhaleContainer)
@@ -119,8 +150,39 @@ class DBContainer:
         return q.all()
 
     @staticmethod
+    def get_routable_containers(include_starting=True):
+        """Instances whose FRP/TRP routes are meant to exist right now.
+
+        New rows begin in PROVISIONING and may not have allocated public ports
+        yet. STOPPING/CLEANUP_PENDING rows must not be reintroduced by a router
+        reload. Existing rows with a NULL status remain routable for compatibility.
+        """
+        timeout = int(get_config("whale:docker_timeout", "3600"))
+        alive_since = datetime.datetime.now() - datetime.timedelta(seconds=timeout)
+        active_states = [WhaleContainer.STATUS_READY]
+        if include_starting:
+            active_states.append(WhaleContainer.STATUS_STARTING)
+        q = db.session.query(WhaleContainer).filter(
+            WhaleContainer.start_time >= alive_since,
+            or_(
+                WhaleContainer.status.is_(None),
+                WhaleContainer.status.in_(tuple(active_states)),
+            ),
+        )
+        return q.all()
+
+    @staticmethod
     def get_all_container():
         return db.session.query(WhaleContainer).all()
+
+    @staticmethod
+    def get_all_container_count():
+        """Count every persisted instance, including entries awaiting cleanup.
+
+        Cleanup-pending rows still represent allocated resources and must continue
+        to consume the configured global capacity until their resources are gone.
+        """
+        return db.session.query(WhaleContainer).count()
 
     @staticmethod
     def get_all_alive_container_page(page_start, page_end):
@@ -153,9 +215,16 @@ class DBContainer:
         """
         timeout = int(get_config("whale:docker_timeout", "3600"))
         alive_since = datetime.datetime.now() - datetime.timedelta(seconds=timeout)
-        q = db.session.query(WhaleContainer).filter(
-            WhaleContainer.start_time >= alive_since
+        visible_filter = or_(
+            WhaleContainer.start_time >= alive_since,
+            WhaleContainer.status.in_(
+                (
+                    WhaleContainer.STATUS_STOPPING,
+                    WhaleContainer.STATUS_CLEANUP_PENDING,
+                )
+            ),
         )
+        q = db.session.query(WhaleContainer).filter(visible_filter)
 
         search = (search or "").strip()
         if search:
@@ -213,7 +282,15 @@ class DBContainer:
         """Get filter options from instances that have not yet expired."""
         timeout = int(get_config("whale:docker_timeout", "3600"))
         alive_since = datetime.datetime.now() - datetime.timedelta(seconds=timeout)
-        alive_filter = WhaleContainer.start_time >= alive_since
+        alive_filter = or_(
+            WhaleContainer.start_time >= alive_since,
+            WhaleContainer.status.in_(
+                (
+                    WhaleContainer.STATUS_STOPPING,
+                    WhaleContainer.STATUS_CLEANUP_PENDING,
+                )
+            ),
+        )
 
         nodes = [
             row[0] for row in

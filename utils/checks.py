@@ -1,3 +1,5 @@
+import warnings
+
 from docker.errors import DockerException, TLSParameterError, APIError, requests
 
 from CTFd.utils import get_config
@@ -19,6 +21,20 @@ class WhaleChecks:
             client.ping()
         except (APIError, requests.RequestException):
             return f'Unable to connect to Docker API, check your API connectivity'
+
+        docker_api_url = str(
+            get_config("whale:docker_api_url", "unix:///var/run/docker.sock")
+        )
+        docker_use_ssl = get_config("whale:docker_use_ssl", False)
+        if isinstance(docker_use_ssl, str):
+            docker_use_ssl = docker_use_ssl.strip().lower() in ("1", "true", "yes", "on")
+        if docker_api_url.startswith("tcp://") and not docker_use_ssl:
+            warnings.warn(
+                "CTFd-Whale is configured to use the Docker TCP API without TLS. "
+                "Prefer unix:///var/run/docker.sock for a local Docker daemon; "
+                "never expose an unauthenticated Docker API on an untrusted network.",
+                RuntimeWarning,
+            )
 
         credentials = get_config("whale:docker_credentials")
         if credentials and credentials.count(':') == 1:

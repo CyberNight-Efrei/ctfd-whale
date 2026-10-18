@@ -6,7 +6,7 @@ from ..models import WhaleRedirectTemplate, db
 def setup_default_configs():
     for key, val in {
         'setup': 'true',
-        'docker_api_url': 'tcp://172.17.0.1:2375',
+        'docker_api_url': 'unix:///var/run/docker.sock',
         'docker_credentials': '',
         'docker_dns': '10.44.42.112',
         'docker_max_container_count': '100',

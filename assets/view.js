@@ -45,9 +45,37 @@ function loadInfo() {
             html: response.message,
             button: "OK"
         });
+
+        if (response.lifecycle_state && response.lifecycle_state !== "ready") {
+            const lifecycleMessages = {
+                provisioning: "Creating Docker services…",
+                starting: "Configuring access routes…",
+                stopping: "Stopping this instance…",
+                cleanup_pending: "Cleanup is incomplete. Whale will retry automatically.",
+                unknown: "The instance state is unknown. Checking again shortly."
+            };
+            $('#whale-panel-started').hide();
+            $('#whale-panel-stopped').hide();
+            $('#whale-panel-transition').show();
+            $('#whale-lifecycle-message').text(
+                lifecycleMessages[response.lifecycle_state] ||
+                "The instance is changing state. Checking again shortly."
+            );
+            if (window.whaleLifecyclePoll === undefined) {
+                window.whaleLifecyclePoll = setInterval(loadInfo, 3000);
+            }
+            return;
+        }
+
+        if (window.whaleLifecyclePoll !== undefined) {
+            clearInterval(window.whaleLifecyclePoll);
+            window.whaleLifecyclePoll = undefined;
+        }
+        $('#whale-panel-transition').hide();
+
         if (response.remaining_time != undefined) {
             $('#whale-challenge-user-access').html(response.user_access);
-            $('#whale-challenge-lan-domain').html(response.lan_domain);
+            $('#whale-challenge-lan-domain').text(response.lan_domain);
             $('#whale-challenge-count-down').text(response.remaining_time);
             $('#whale-panel-stopped').hide();
             $('#whale-panel-started').show();

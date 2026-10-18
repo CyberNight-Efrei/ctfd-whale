@@ -79,12 +79,27 @@ class UserContainers(Resource):
         link = f'<a target="_blank" href="/challenges#{c.category}-{c.name}-{c.id}">{c.name}</a>'
         if int(container.challenge_id) != int(challenge_id):
             return abort(403, f'Container already started but not from this challenge ({link})', success=False)
+
+        lifecycle_state = container.lifecycle_state
+        remaining_time = int(
+            timeout - (datetime.now() - container.start_time).total_seconds()
+        )
+        if lifecycle_state != "ready" or remaining_time <= 0:
+            # Do not expose stale access details while an instance is provisioning,
+            # stopping, or awaiting cleanup. The challenge UI can poll this state.
+            state = lifecycle_state if lifecycle_state != "ready" else "stopping"
+            return {
+                "success": True,
+                "data": {"lifecycle_state": state},
+            }
+
         return {
             'success': True,
             'data': {
+                'lifecycle_state': lifecycle_state,
                 'lan_domain': str(user_id) + "-" + container.uuid,
                 'user_access': Router.access(container),
-                'remaining_time': timeout - (datetime.now() - container.start_time).seconds,
+                'remaining_time': remaining_time,
             }
         }
 
@@ -94,11 +109,16 @@ class UserContainers(Resource):
     @frequency_limited
     def post():
         user_id = current_user.get_current_user().id
-        ControlUtil.try_remove_container(user_id)
-
-        current_count = DBContainer.get_all_alive_container_count()
-        if int(get_config("whale:docker_max_container_count")) <= int(current_count):
-            abort(403, 'Max container count exceed.', success=False)
+        existing_container = DBContainer.get_current_containers(user_id=user_id)
+        if existing_container:
+            removed, message = ControlUtil.try_remove_container(user_id)
+            if not removed and message != "No such container":
+                abort(
+                    503,
+                    "The previous instance could not be cleaned up safely. "
+                    f"Please retry shortly. Details: {message}",
+                    success=False,
+                )
 
         challenge_id = request.args.get('challenge_id')
         result, message = ControlUtil.try_add_container(

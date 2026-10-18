@@ -11,6 +11,7 @@ services:
       - UPLOAD_FOLDER=/var/uploads
       - DATABASE_URL=mysql+pymysql://ctfd:ctfd@db/ctfd
       - REDIS_URL=redis://cache:6379
+      - CACHE_TYPE=redis
       - WORKERS=1
       - LOG_FOLDER=/var/log/CTFd
       - ACCESS_LOG=-
@@ -23,6 +24,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - db
+      - cache
     networks:
         default:
         internal:

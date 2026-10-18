@@ -1,104 +1,489 @@
+"""Shared, concurrency-safe pools for public ports and per-instance subnets.
+
+Redis is required for production multi-worker deployments. The filesystem/simple
+backend remains suitable only for local testing and is not a distributed lock.
+"""
 import ipaddress
+import threading
+import uuid
 import warnings
+
 from CTFd.cache import cache
+from CTFd.models import db
 from CTFd.utils import get_config
 from flask_redis import FlaskRedis
 from redis.exceptions import LockError
 
-from .db import DBContainer
+from ..models import WhaleContainerPort
+
+
+PORT_POOL_KEY = "ctfd_whale-port-set"
+NETWORK_POOL_KEY = "ctfd_whale-network-set"
+PORT_RESERVATION_PREFIX = "ctfd_whale-port-reservation:"
+NETWORK_RESERVATION_PREFIX = "ctfd_whale-network-reservation:"
+POOL_LOCK_KEY = "ctfd_whale-pool-allocation-lock"
+RESERVATION_TTL_SECONDS = 300
 
 
 class CacheProvider:
+    _lifecycle_locks = {}
+    _lifecycle_locks_guard = threading.Lock()
+    _capacity_lock = threading.Lock()
+    _router_reload_lock = threading.Lock()
+    _local_pool_lock = threading.RLock()
+
     def __init__(self, app, *args, **kwargs):
-        if app.config['CACHE_TYPE'] == 'redis':
+        cache_type = app.config.get("CACHE_TYPE", "simple")
+        if cache_type == "redis":
             self.provider = RedisCacheProvider(app, *args, **kwargs)
-        elif app.config['CACHE_TYPE'] in ['filesystem', 'simple']:
-            if not hasattr(CacheProvider, 'cache'):
+        elif cache_type in ("filesystem", "simple"):
+            if not hasattr(CacheProvider, "cache"):
                 CacheProvider.cache = {}
             self.provider = FilesystemCacheProvider(app, *args, **kwargs)
-            self.init_port_sets()
+        else:
+            raise ValueError(
+                f"Unsupported CTFd cache backend for CTFd-Whale: {cache_type}"
+            )
+
+    def _public_port_candidates(self):
+        minimum = int(get_config("whale:frp_direct_port_minimum", 10000))
+        maximum = int(get_config("whale:frp_direct_port_maximum", 10100))
+        if not (1 <= minimum <= maximum <= 65535):
+            raise ValueError(
+                "Invalid FRP direct port range; expected 1 <= minimum <= maximum <= 65535."
+            )
+        return set(range(minimum, maximum + 1))
+
+    def _reconcile_public_ports(self):
+        # The Redis provider invokes this DB callback under its allocation lock.
+        self.provider.reconcile_port_pool(
+            self._public_port_candidates(),
+            self._used_public_ports_from_db,
+        )
+
+    def _network_pool_snapshot(self):
+        from .docker import get_docker_client
+
+        client = get_docker_client()
+        base_network = ipaddress.ip_network(
+            get_config("whale:docker_subnet", "174.1.0.0/16"),
+            strict=False,
+        )
+        new_prefix = int(get_config("whale:docker_subnet_new_prefix", "24"))
+        if base_network.version != 4:
+            raise ValueError("CTFd-Whale grouped challenge pools currently require an IPv4 subnet.")
+        if not (base_network.prefixlen <= new_prefix <= 32):
+            raise ValueError(
+                "Docker subnet prefix must be between the configured subnet prefix and 32."
+            )
+        subnet_count = 1 << (new_prefix - base_network.prefixlen)
+        if subnet_count > 65536:
+            raise ValueError(
+                f"Docker subnet range would create {subnet_count} candidate subnets; "
+                "use a narrower range or larger subnet prefix."
+            )
+        candidates = {
+            str(subnet) for subnet in base_network.subnets(new_prefix=new_prefix)
+        }
+
+        def existing_network_prefixes():
+            prefixes = set()
+            for network in client.networks.list(filters={"label": "prefix"}):
+                attrs = getattr(network, "attrs", {}) or {}
+                labels = attrs.get("Labels") or {}
+                prefix = labels.get("prefix")
+                if prefix:
+                    prefixes.add(str(prefix))
+            return prefixes
+
+        return candidates, existing_network_prefixes
+
+    def _reconcile_network_pool(self):
+        candidates, existing_networks = self._network_pool_snapshot()
+        # This callback is invoked while the provider's distributed allocation
+        # lock is held so a concurrent subnet reservation cannot be lost.
+        self.provider.reconcile_network_pool(candidates, existing_networks)
 
     def init_port_sets(self):
-        self.clear()
+        """Reconcile free resources without making allocated resources available."""
+        self._reconcile_public_ports()
+        try:
+            self._reconcile_network_pool()
+        except Exception as exc:
+            # Direct ports remain available even if Docker/Swarm is unreachable.
+            warnings.warn(
+                f"[CTFd-Whale] Unable to reconcile Docker network subnets: {exc}",
+                RuntimeWarning,
+            )
 
-        containers = DBContainer.get_all_container()
-        used_port_list = []
-        for container in containers:
-            if container.port != 0:
-                used_port_list.append(container.port)
-        for port in range(int(get_config("whale:frp_direct_port_minimum", 29000)),
-                          int(get_config("whale:frp_direct_port_maximum", 28000)) + 1):
-            if port not in used_port_list:
-                self.add_available_port(port)
+    def get_available_port(self):
+        # Reconcile *before* popping: old/stale pool members must never be handed
+        # out before persisted DB ownership has been checked under the Redis lock.
+        try:
+            self._reconcile_public_ports()
+        except Exception as exc:
+            warnings.warn(
+                f"[CTFd-Whale] Unable to safely reconcile the public port pool: {exc}",
+                RuntimeWarning,
+            )
+            return None
 
-        from .docker import get_docker_client
-        client = get_docker_client()
+        port = self.provider.get_available_port()
+        if port is not None:
+            return port
 
-        docker_subnet = get_config("whale:docker_subnet", "174.1.0.0/16")
-        docker_subnet_new_prefix = int(
-            get_config("whale:docker_subnet_new_prefix", "24"))
+        # A concurrent allocator may have taken the final free port after our
+        # reconciliation. Refresh once more; active leases are excluded atomically.
+        try:
+            self._reconcile_public_ports()
+        except Exception as exc:
+            warnings.warn(
+                f"[CTFd-Whale] Unable to refresh the public port pool: {exc}",
+                RuntimeWarning,
+            )
+            return None
+        return self.provider.get_available_port()
 
-        exist_networks = []
-        available_networks = []
+    def get_available_network_range(self):
+        # Never hand out a subnet from a stale pool before checking Swarm ownership.
+        # Reconciliation also recovers leases abandoned by workers that crashed.
+        try:
+            self._reconcile_network_pool()
+        except Exception as exc:
+            warnings.warn(
+                f"[CTFd-Whale] Unable to safely reconcile Docker network subnets: {exc}",
+                RuntimeWarning,
+            )
+            return None
 
-        for network in client.networks.list(filters={'label': 'prefix'}):
-            exist_networks.append(str(network.attrs['Labels']['prefix']))
+        subnet = self.provider.get_available_network_range()
+        if subnet is not None:
+            return subnet
 
-        for network in list(ipaddress.ip_network(docker_subnet).subnets(new_prefix=docker_subnet_new_prefix)):
-            if str(network) not in exist_networks:
-                available_networks.append(str(network))
+        # Another request may have taken the last subnet after reconciliation.
+        try:
+            self._reconcile_network_pool()
+        except Exception as exc:
+            warnings.warn(
+                f"[CTFd-Whale] Unable to refresh Docker network subnets: {exc}",
+                RuntimeWarning,
+            )
+            return None
+        return self.provider.get_available_network_range()
 
-        self.add_available_network_range(*set(available_networks))
+    @staticmethod
+    def _used_public_ports_from_db():
+        rows = (
+            db.session.query(WhaleContainerPort.public_port)
+            .filter(WhaleContainerPort.public_port.isnot(None))
+            .all()
+        )
+        return {int(row[0]) for row in rows}
+
+    @staticmethod
+    def _is_public_port_used(port):
+        return (
+            db.session.query(WhaleContainerPort.id)
+            .filter(WhaleContainerPort.public_port == int(port))
+            .first()
+            is not None
+        )
+
+    def add_available_port(self, port):
+        """Return a public port without overriding an in-flight reservation."""
+        return self.provider.add_available_port(
+            int(port),
+            is_used=lambda: self._is_public_port_used(port),
+        )
+
+    def return_port_reservation(self, port):
+        """Return this operation's unused port lease to the pool atomically."""
+        return self.provider.return_port_reservation(
+            int(port), is_used=lambda: self._is_public_port_used(port)
+        )
+
+    def return_network_reservation(self, subnet):
+        """Return this operation's unused subnet lease if Docker no longer owns it."""
+        try:
+            from .docker import get_docker_client
+
+            client = get_docker_client()
+
+            def is_used():
+                for network in client.networks.list(filters={"label": "prefix"}):
+                    attrs = getattr(network, "attrs", {}) or {}
+                    labels = attrs.get("Labels") or {}
+                    if str(labels.get("prefix") or "") == str(subnet):
+                        return True
+                return False
+
+            return self.provider.return_network_reservation(str(subnet), is_used=is_used)
+        except Exception as exc:
+            warnings.warn(
+                f"[CTFd-Whale] Unable to safely return Docker subnet reservation: {exc}",
+                RuntimeWarning,
+            )
+            return False
+
+    def add_available_network_range(self, *ranges):
+        """Return subnets only when neither a live network nor a lease owns them."""
+        try:
+            from .docker import get_docker_client
+
+            client = get_docker_client()
+
+            def used_subnets():
+                used = set()
+                for network in client.networks.list(filters={"label": "prefix"}):
+                    attrs = getattr(network, "attrs", {}) or {}
+                    labels = attrs.get("Labels") or {}
+                    prefix = labels.get("prefix")
+                    if prefix:
+                        used.add(str(prefix))
+                return used
+
+            return self.provider.add_available_network_range(
+                *ranges, is_used=used_subnets
+            )
+        except Exception as exc:
+            # Fail closed. Pool reconciliation will re-discover the subnet later;
+            # never mark it free when current Docker ownership is unknown.
+            warnings.warn(
+                f"[CTFd-Whale] Unable to safely return Docker subnet to the pool: {exc}",
+                RuntimeWarning,
+            )
+            return False
+
+    def acquire_lifecycle_lock(self, user_id):
+        return self.provider.acquire_lifecycle_lock(user_id)
+
+    def release_lifecycle_lock(self):
+        return self.provider.release_lifecycle_lock()
+
+    def acquire_capacity_lock(self):
+        return self.provider.acquire_capacity_lock()
+
+    def release_capacity_lock(self):
+        return self.provider.release_capacity_lock()
+
+    def acquire_router_reload_lock(self):
+        return self.provider.acquire_router_reload_lock()
+
+    def release_router_reload_lock(self):
+        return self.provider.release_router_reload_lock()
 
     def __getattr__(self, name):
         return self.provider.__getattribute__(name)
 
 
 class FilesystemCacheProvider:
+    """Single-process development provider; not safe for production concurrency."""
+
     def __init__(self, app, *args, **kwargs):
         warnings.warn(
-            '\n[CTFd Whale] Warning: looks like you are using filesystem cache. '
-            '\nThis is for TESTING purposes only, DO NOT USE on production sites.',
-            RuntimeWarning
+            "\n[CTFd Whale] Warning: filesystem/simple cache is for testing only. "
+            "\nUse Redis for production and multiple CTFd workers.",
+            RuntimeWarning,
         )
-        self.key = 'ctfd_whale_lock-' + str(kwargs.get('user_id', 0))
-        self.global_port_key = "ctfd_whale-port-set"
-        self.global_network_key = "ctfd_whale-network-set"
+        self.key = "ctfd_whale_lock-" + str(kwargs.get("user_id", 0))
+        self.global_port_key = PORT_POOL_KEY
+        self.global_network_key = NETWORK_POOL_KEY
+        self.port_reservation_key = PORT_POOL_KEY + "-reservations"
+        self.network_reservation_key = NETWORK_POOL_KEY + "-reservations"
+        self.current_lifecycle_lock = None
+        self.current_capacity_lock = False
+        self.current_router_reload_lock = False
+        self._owned_port_reservations = {}
+        self._owned_network_reservations = {}
+
+    @staticmethod
+    def _read_set(key):
+        return set(cache.get(key) or ())
 
     def clear(self):
         cache.set(self.global_port_key, set())
         cache.set(self.global_network_key, set())
+        cache.set(self.port_reservation_key, set())
+        cache.set(self.network_reservation_key, set())
 
-    def add_available_network_range(self, *ranges):
-        s = cache.get(self.global_network_key)
-        s.update(ranges)
-        cache.set(self.global_network_key, s)
+    def reconcile_port_pool(self, candidates, used):
+        with CacheProvider._local_pool_lock:
+            if callable(used):
+                used = used()
+            reserved = {int(item) for item in self._read_set(self.port_reservation_key)}
+            available = set(candidates) - {int(item) for item in used} - reserved
+            cache.set(self.global_port_key, available)
 
-    def get_available_network_range(self):
-        try:
-            s = cache.get(self.global_network_key)
-            r = s.pop()
-            cache.set(self.global_network_key, s)
-            return r
-        except KeyError:
-            return None
-
-    def add_available_port(self, port):
-        s = cache.get(self.global_port_key)
-        s.add(port)
-        cache.set(self.global_port_key, s)
+    def reconcile_network_pool(self, candidates, used):
+        with CacheProvider._local_pool_lock:
+            if callable(used):
+                used = used()
+            reserved = self._read_set(self.network_reservation_key)
+            cache.set(self.global_network_key, set(candidates) - set(used) - reserved)
 
     def get_available_port(self):
-        try:
-            s = cache.get(self.global_port_key)
-            r = s.pop()
-            cache.set(self.global_port_key, s)
-            return r
-        except KeyError:
-            return None
+        with CacheProvider._local_pool_lock:
+            available = {int(item) for item in self._read_set(self.global_port_key)}
+            reserved = {int(item) for item in self._read_set(self.port_reservation_key)}
+            available -= reserved
+            if not available:
+                cache.set(self.global_port_key, set())
+                return None
+            port = available.pop()
+            cache.set(self.global_port_key, available)
+            reserved.add(port)
+            cache.set(self.port_reservation_key, reserved)
+            self._owned_port_reservations[port] = uuid.uuid4().hex
+            return port
+
+    def commit_port_reservation(self, port):
+        with CacheProvider._local_pool_lock:
+            port = int(port)
+            token = self._owned_port_reservations.pop(port, None)
+            if token is None:
+                return False
+            reserved = {int(item) for item in self._read_set(self.port_reservation_key)}
+            reserved.discard(port)
+            cache.set(self.port_reservation_key, reserved)
+            return True
+
+    def return_port_reservation(self, port, is_used=None):
+        with CacheProvider._local_pool_lock:
+            port = int(port)
+            token = self._owned_port_reservations.get(port)
+            reserved = {int(item) for item in self._read_set(self.port_reservation_key)}
+            if token is None or port not in reserved:
+                return False
+            if is_used is not None and is_used():
+                return False
+            reserved.discard(port)
+            cache.set(self.port_reservation_key, reserved)
+            minimum = int(get_config("whale:frp_direct_port_minimum", 10000))
+            maximum = int(get_config("whale:frp_direct_port_maximum", 10100))
+            if minimum <= port <= maximum:
+                available = {int(item) for item in self._read_set(self.global_port_key)}
+                available.add(port)
+                cache.set(self.global_port_key, available)
+            self._owned_port_reservations.pop(port, None)
+            return True
+
+    def add_available_port(self, port, is_used=None):
+        with CacheProvider._local_pool_lock:
+            port = int(port)
+            if is_used is not None and is_used():
+                return False
+            reserved = {int(item) for item in self._read_set(self.port_reservation_key)}
+            if port in reserved:
+                return False
+            minimum = int(get_config("whale:frp_direct_port_minimum", 10000))
+            maximum = int(get_config("whale:frp_direct_port_maximum", 10100))
+            if minimum <= port <= maximum:
+                available = {int(item) for item in self._read_set(self.global_port_key)}
+                available.add(port)
+                cache.set(self.global_port_key, available)
+            return True
+
+    def get_available_network_range(self):
+        with CacheProvider._local_pool_lock:
+            available = self._read_set(self.global_network_key)
+            reserved = self._read_set(self.network_reservation_key)
+            available -= reserved
+            if not available:
+                cache.set(self.global_network_key, set())
+                return None
+            subnet = available.pop()
+            cache.set(self.global_network_key, available)
+            reserved.add(subnet)
+            cache.set(self.network_reservation_key, reserved)
+            self._owned_network_reservations[subnet] = uuid.uuid4().hex
+            return str(subnet)
+
+    def commit_network_reservation(self, subnet):
+        with CacheProvider._local_pool_lock:
+            subnet = str(subnet)
+            token = self._owned_network_reservations.pop(subnet, None)
+            if token is None:
+                return False
+            reserved = self._read_set(self.network_reservation_key)
+            reserved.discard(subnet)
+            cache.set(self.network_reservation_key, reserved)
+            return True
+
+    def return_network_reservation(self, subnet, is_used=None):
+        with CacheProvider._local_pool_lock:
+            subnet = str(subnet)
+            token = self._owned_network_reservations.get(subnet)
+            reserved = self._read_set(self.network_reservation_key)
+            if token is None or subnet not in reserved:
+                return False
+            if is_used is not None and is_used():
+                return False
+            reserved.discard(subnet)
+            cache.set(self.network_reservation_key, reserved)
+            available = self._read_set(self.global_network_key)
+            available.add(subnet)
+            cache.set(self.global_network_key, available)
+            self._owned_network_reservations.pop(subnet, None)
+            return True
+
+    def add_available_network_range(self, *ranges, is_used=None):
+        used = set(is_used()) if is_used is not None else set()
+        reserved = self._read_set(self.network_reservation_key)
+        available = self._read_set(self.global_network_key)
+        for subnet in ranges:
+            subnet = str(subnet)
+            if subnet in used or subnet in reserved:
+                continue
+            available.add(subnet)
+        cache.set(self.global_network_key, available)
+
+    def acquire_lifecycle_lock(self, user_id):
+        # Protect multiple request threads inside this development process. This
+        # is not distributed; Redis is still required for multi-worker production.
+        with CacheProvider._lifecycle_locks_guard:
+            lock = CacheProvider._lifecycle_locks.setdefault(
+                str(user_id), threading.Lock()
+            )
+        if not lock.acquire(timeout=10):
+            return False
+        self.current_lifecycle_lock = lock
+        return True
+
+    def release_lifecycle_lock(self):
+        lock = self.current_lifecycle_lock
+        self.current_lifecycle_lock = None
+        if lock is None:
+            return False
+        lock.release()
+        return True
+
+    def acquire_capacity_lock(self):
+        if not CacheProvider._capacity_lock.acquire(timeout=10):
+            return False
+        self.current_capacity_lock = True
+        return True
+
+    def release_capacity_lock(self):
+        if not self.current_capacity_lock:
+            return False
+        self.current_capacity_lock = False
+        CacheProvider._capacity_lock.release()
+        return True
+
+    def acquire_router_reload_lock(self):
+        if not CacheProvider._router_reload_lock.acquire(timeout=10):
+            return False
+        self.current_router_reload_lock = True
+        return True
+
+    def release_router_reload_lock(self):
+        if not self.current_router_reload_lock:
+            return False
+        self.current_router_reload_lock = False
+        CacheProvider._router_reload_lock.release()
+        return True
 
     def acquire_lock(self):
-        # for testing purposes only, so no need to set this limit
         return True
 
     def release_lock(self):
@@ -108,43 +493,334 @@ class FilesystemCacheProvider:
 class RedisCacheProvider(FlaskRedis):
     def __init__(self, app, *args, **kwargs):
         super().__init__(app)
-        self.key = 'ctfd_whale_lock-' + str(kwargs.get('user_id', 0))
+        self.key = "ctfd_whale_lock-" + str(kwargs.get("user_id", 0))
         self.current_lock = None
-        self.global_port_key = "ctfd_whale-port-set"
-        self.global_network_key = "ctfd_whale-network-set"
+        self.current_lifecycle_lock = None
+        self.current_capacity_lock = None
+        self.current_router_reload_lock = None
+        self._owned_port_reservations = {}
+        self._owned_network_reservations = {}
+        self.global_port_key = PORT_POOL_KEY
+        self.global_network_key = NETWORK_POOL_KEY
 
-    def clear(self):
-        self.delete(self.global_port_key)
-        self.delete(self.global_network_key)
+    def _pool_lock(self):
+        lock = self.lock(name=POOL_LOCK_KEY, timeout=120)
+        if not lock.acquire(blocking=True, blocking_timeout=10):
+            return None
+        return lock
 
-    def add_available_network_range(self, *ranges):
-        self.sadd(self.global_network_key, *ranges)
+    def _reservation_key(self, resource, value):
+        prefix = PORT_RESERVATION_PREFIX if resource == "port" else NETWORK_RESERVATION_PREFIX
+        return prefix + str(value)
 
-    def get_available_network_range(self):
-        return self.spop(self.global_network_key).decode()
+    def _active_reservations(self, resource, candidates):
+        candidates = list(candidates)
+        if not candidates:
+            return set()
+        pipeline = self.pipeline()
+        for candidate in candidates:
+            pipeline.exists(self._reservation_key(resource, candidate))
+        results = pipeline.execute()
+        return {
+            candidate for candidate, exists in zip(candidates, results) if exists
+        }
 
-    def add_available_port(self, port):
-        self.sadd(self.global_port_key, str(port))
+    def reconcile_port_pool(self, candidates, used):
+        candidates = {int(item) for item in candidates}
+        lock = self._pool_lock()
+        if lock is None:
+            raise RuntimeError("Unable to acquire the Redis port-pool lock.")
+        try:
+            if callable(used):
+                used = used()
+            used = {int(item) for item in used}
+            reserved = self._active_reservations("port", candidates)
+            available = candidates - used - reserved
+            self.delete(self.global_port_key)
+            if available:
+                self.sadd(self.global_port_key, *sorted(available))
+        finally:
+            lock.release()
+
+    def reconcile_network_pool(self, candidates, used):
+        candidates = {str(item) for item in candidates}
+        lock = self._pool_lock()
+        if lock is None:
+            raise RuntimeError("Unable to acquire the Redis network-pool lock.")
+        try:
+            if callable(used):
+                used = used()
+            used = {str(item) for item in used}
+            reserved = self._active_reservations("network", candidates)
+            available = candidates - used - reserved
+            self.delete(self.global_network_key)
+            if available:
+                self.sadd(self.global_network_key, *sorted(available))
+        finally:
+            lock.release()
 
     def get_available_port(self):
-        return int(self.spop(self.global_port_key))
+        lock = self._pool_lock()
+        if lock is None:
+            return None
+        try:
+            while True:
+                value = self.spop(self.global_port_key)
+                if value is None:
+                    return None
+                port = int(value)
+                reservation_key = self._reservation_key("port", port)
+                if self.exists(reservation_key):
+                    # Discard stale pool entries that conflict with a live lease.
+                    continue
+                token = uuid.uuid4().hex
+                self.set(reservation_key, token, ex=RESERVATION_TTL_SECONDS)
+                self._owned_port_reservations[port] = token
+                return port
+        finally:
+            lock.release()
 
-    def acquire_lock(self):
-        lock = self.lock(name=self.key, timeout=10)
+    def commit_port_reservation(self, port):
+        port = int(port)
+        token = self._owned_port_reservations.get(port)
+        if token is None:
+            return False
+        lock = self._pool_lock()
+        if lock is None:
+            raise RuntimeError("Unable to acquire the Redis port-pool lock.")
+        try:
+            key = self._reservation_key("port", port)
+            current = self.get(key)
+            if isinstance(current, bytes):
+                current = current.decode()
+            if current != token:
+                self._owned_port_reservations.pop(port, None)
+                return False
+            self.delete(key)
+            self._owned_port_reservations.pop(port, None)
+            return True
+        finally:
+            lock.release()
 
-        if not lock.acquire(blocking=True, blocking_timeout=2.0):
+    def return_port_reservation(self, port, is_used=None):
+        port = int(port)
+        token = self._owned_port_reservations.get(port)
+        if token is None:
+            return False
+        minimum = int(get_config("whale:frp_direct_port_minimum", 10000))
+        maximum = int(get_config("whale:frp_direct_port_maximum", 10100))
+        lock = self._pool_lock()
+        if lock is None:
+            raise RuntimeError("Unable to acquire the Redis port-pool lock.")
+        try:
+            key = self._reservation_key("port", port)
+            current = self.get(key)
+            if isinstance(current, bytes):
+                current = current.decode()
+            if current != token:
+                self._owned_port_reservations.pop(port, None)
+                return False
+            if is_used is not None and is_used():
+                return False
+            self.delete(key)
+            if minimum <= port <= maximum:
+                self.sadd(self.global_port_key, str(port))
+            self._owned_port_reservations.pop(port, None)
+            return True
+        finally:
+            lock.release()
+
+    def add_available_port(self, port, is_used=None):
+        port = int(port)
+        minimum = int(get_config("whale:frp_direct_port_minimum", 10000))
+        maximum = int(get_config("whale:frp_direct_port_maximum", 10100))
+        lock = self._pool_lock()
+        if lock is None:
+            raise RuntimeError("Unable to acquire the Redis port-pool lock.")
+        try:
+            # A concurrent allocator may have reserved this port after its former
+            # DB mapping was cleared. Never delete its lease or reinsert the port.
+            if self.exists(self._reservation_key("port", port)):
+                return False
+            if is_used is not None and is_used():
+                return False
+            if minimum <= port <= maximum:
+                self.sadd(self.global_port_key, str(port))
+        finally:
+            lock.release()
+        return True
+
+    def get_available_network_range(self):
+        lock = self._pool_lock()
+        if lock is None:
+            return None
+        try:
+            while True:
+                value = self.spop(self.global_network_key)
+                if value is None:
+                    return None
+                subnet = value.decode() if isinstance(value, bytes) else str(value)
+                reservation_key = self._reservation_key("network", subnet)
+                if self.exists(reservation_key):
+                    # Discard stale pool entries that conflict with a live lease.
+                    continue
+                token = uuid.uuid4().hex
+                self.set(
+                    reservation_key,
+                    token,
+                    ex=RESERVATION_TTL_SECONDS,
+                )
+                self._owned_network_reservations[subnet] = token
+                return subnet
+        finally:
+            lock.release()
+
+    def commit_network_reservation(self, subnet):
+        subnet = str(subnet)
+        token = self._owned_network_reservations.get(subnet)
+        if token is None:
+            return False
+        lock = self._pool_lock()
+        if lock is None:
+            raise RuntimeError("Unable to acquire the Redis network-pool lock.")
+        try:
+            key = self._reservation_key("network", subnet)
+            current = self.get(key)
+            if isinstance(current, bytes):
+                current = current.decode()
+            if current != token:
+                self._owned_network_reservations.pop(subnet, None)
+                return False
+            self.delete(key)
+            self._owned_network_reservations.pop(subnet, None)
+            return True
+        finally:
+            lock.release()
+
+    def return_network_reservation(self, subnet, is_used=None):
+        subnet = str(subnet)
+        token = self._owned_network_reservations.get(subnet)
+        if token is None:
+            return False
+        lock = self._pool_lock()
+        if lock is None:
+            raise RuntimeError("Unable to acquire the Redis network-pool lock.")
+        try:
+            key = self._reservation_key("network", subnet)
+            current = self.get(key)
+            if isinstance(current, bytes):
+                current = current.decode()
+            if current != token:
+                self._owned_network_reservations.pop(subnet, None)
+                return False
+            if is_used is not None and is_used():
+                return False
+            self.delete(key)
+            self.sadd(self.global_network_key, subnet)
+            self._owned_network_reservations.pop(subnet, None)
+            return True
+        finally:
+            lock.release()
+
+    def add_available_network_range(self, *ranges, is_used=None):
+        lock = self._pool_lock()
+        if lock is None:
+            raise RuntimeError("Unable to acquire the Redis network-pool lock.")
+        try:
+            currently_used = set(is_used()) if is_used is not None else set()
+            available = []
+            for subnet in ranges:
+                subnet = str(subnet)
+                # A concurrent grouped challenge may have reserved this subnet
+                # after the old network was removed. Preserve its lease and also
+                # verify that Docker has not already attached the subnet elsewhere.
+                if self.exists(self._reservation_key("network", subnet)):
+                    continue
+                if subnet in currently_used:
+                    continue
+                available.append(subnet)
+            if available:
+                self.sadd(self.global_network_key, *available)
+        finally:
+            lock.release()
+
+    def clear(self):
+        self.delete(self.global_port_key, self.global_network_key)
+        # Per-resource reservation keys have TTLs and expire automatically.
+
+    def acquire_lifecycle_lock(self, user_id):
+        # All create/delete paths (including admin actions and the janitor) use
+        # one per-user lifecycle lock, independent of the rate-limit lock.
+        timeout = max(600, int(get_config("whale:docker_timeout", "3600")))
+        lock = self.lock(name=f"ctfd_whale_lifecycle-{user_id}", timeout=timeout)
+        if not lock.acquire(blocking=True, blocking_timeout=10.0):
+            return False
+        self.current_lifecycle_lock = lock
+        return True
+
+    def release_lifecycle_lock(self):
+        lock = self.current_lifecycle_lock
+        self.current_lifecycle_lock = None
+        if lock is None:
+            return False
+        try:
+            lock.release()
+            return True
+        except LockError:
             return False
 
+    def acquire_capacity_lock(self):
+        lock = self.lock(name="ctfd_whale_capacity", timeout=30)
+        if not lock.acquire(blocking=True, blocking_timeout=10.0):
+            return False
+        self.current_capacity_lock = lock
+        return True
+
+    def release_capacity_lock(self):
+        lock = self.current_capacity_lock
+        self.current_capacity_lock = None
+        if lock is None:
+            return False
+        try:
+            lock.release()
+            return True
+        except LockError:
+            return False
+
+    def acquire_router_reload_lock(self):
+        # FRP's config API replaces the complete route set, so updates must be
+        # serialized across workers to prevent concurrent writes from losing routes.
+        lock = self.lock(name="ctfd_whale_router-reload", timeout=120)
+        if not lock.acquire(blocking=True, blocking_timeout=10.0):
+            return False
+        self.current_router_reload_lock = lock
+        return True
+
+    def release_router_reload_lock(self):
+        lock = self.current_router_reload_lock
+        self.current_router_reload_lock = None
+        if lock is None:
+            return False
+        try:
+            lock.release()
+            return True
+        except LockError:
+            return False
+
+    def acquire_lock(self):
+        # The rate-limit lock is independent from the per-user lifecycle lock.
+        timeout = max(600, int(get_config("whale:docker_timeout", "3600")))
+        lock = self.lock(name=self.key, timeout=timeout)
+        if not lock.acquire(blocking=True, blocking_timeout=2.0):
+            return False
         self.current_lock = lock
         return True
 
     def release_lock(self):
         if self.current_lock is None:
             return False
-
         try:
             self.current_lock.release()
-
             return True
         except LockError:
             return False

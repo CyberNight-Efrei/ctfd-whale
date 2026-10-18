@@ -11,6 +11,14 @@
                         onclick="CTFd._internal.challenge.boot()">Launch an instance</button>
                 </div>
             </div>
+            <div id="whale-panel-transition" class="card" style="width: 100%; display: none;" aria-live="polite">
+                <div class="card-body">
+                    <h5 class="card-title">Instance Status</h5>
+                    <p id="whale-lifecycle-message" class="card-text mb-0">
+                        Checking instance state…
+                    </p>
+                </div>
+            </div>
             <div id="whale-panel-started" type="hidden" class="card" style="width: 100%;">
                 <div class="card-body">
                     <h5 class="card-title">Instance Info</h5>

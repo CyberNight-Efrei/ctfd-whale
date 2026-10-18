@@ -76,31 +76,62 @@ class FrpRouter(BaseRouter):
         return rules
 
     def reload(self, exclude=None):
-        rules = []
-        for container in DBContainer.get_all_alive_container():
-            if container.uuid == exclude:
-                continue
-            rules.extend(self._rules_for_container(container))
+        route_lock = CacheProvider(app=current_app)
+        if not route_lock.acquire_router_reload_lock():
+            raise WhaleError(
+                "Another FRP routing update is in progress. Please retry shortly."
+            )
 
         try:
-            if not self.common:
-                common = get_config("whale:frp_config_template", "")
-                if "[common]" in common:
-                    self.common = common
-                else:
-                    remote = self.ses.get(f"{self.url}/api/config", timeout=5)
-                    assert remote.status_code == 200
-                    set_config("whale:frp_config_template", remote.text)
-                    self.common = remote.text
-            config = self.common + "\n" + "\n".join(str(rule) for rule in rules)
-            assert self.ses.put(f"{self.url}/api/config", config, timeout=5).status_code == 200
-            assert self.ses.get(f"{self.url}/api/reload", timeout=5).status_code == 200
-        except (RequestException, AssertionError) as exc:
-            raise WhaleError(
-                "\nfrpc request failed\n"
-                + (f"{exc}\n" if str(exc) else "")
-                + "please check the frp related configs"
-            ) from None
+            # FRP's API replaces the entire configuration. Build the snapshot only
+            # after taking the cross-worker lock, and omit stopping/cleanup-pending
+            # instances so a concurrent reload cannot reintroduce their routes.
+            rules = []
+            for container in DBContainer.get_routable_containers(include_starting=True):
+                if container.uuid == exclude:
+                    continue
+                rules.extend(self._rules_for_container(container))
+
+            try:
+                if not self.common:
+                    common = get_config("whale:frp_config_template", "")
+                    if "[common]" in common:
+                        self.common = common
+                    else:
+                        remote = self.ses.get(f"{self.url}/api/config", timeout=5)
+                        if remote.status_code != 200:
+                            raise RequestException(
+                                f"FRP config endpoint returned HTTP {remote.status_code}"
+                            )
+                        set_config("whale:frp_config_template", remote.text)
+                        self.common = remote.text
+                config = self.common + "\n" + "\n".join(str(rule) for rule in rules)
+                update_response = self.ses.put(
+                    f"{self.url}/api/config", config, timeout=5
+                )
+                if update_response.status_code != 200:
+                    raise RequestException(
+                        f"FRP config update returned HTTP {update_response.status_code}"
+                    )
+                reload_response = self.ses.get(f"{self.url}/api/reload", timeout=5)
+                if reload_response.status_code != 200:
+                    raise RequestException(
+                        f"FRP reload returned HTTP {reload_response.status_code}"
+                    )
+            except RequestException as exc:
+                raise WhaleError(
+                    "\nfrpc request failed\n"
+                    + (f"{exc}\n" if str(exc) else "")
+                    + "please check the frp related configs"
+                ) from None
+        finally:
+            try:
+                route_lock.release_router_reload_lock()
+            except Exception as exc:
+                warnings.warn(
+                    f"[CTFd-Whale] Unable to release FRP routing lock: {exc}",
+                    RuntimeWarning,
+                )
 
     def access(self, container: WhaleContainer):
         mappings = list(container.port_mappings)
@@ -214,32 +245,94 @@ class FrpRouter(BaseRouter):
                 if mapping.protocol in ("tcp", "ssh") and not mapping.public_port:
                     port = cache.get_available_port()
                     if not port:
+                        # Discard uncommitted mappings first. Otherwise the ORM's
+                        # identity map can make a reservation look persisted/in use.
+                        db.session.rollback()
                         for allocated_port in allocated:
-                            cache.add_available_port(allocated_port)
+                            try:
+                                cache.return_port_reservation(allocated_port)
+                            except Exception:
+                                logging.exception(
+                                    "Unable to release reserved public port %s after allocation failure",
+                                    allocated_port,
+                                )
                         return False, "No available public ports. Please wait or increase the FRP port range."
                     mapping.public_port = int(port)
                     allocated.append(int(port))
             db.session.commit()
             self.reload()
+            # The DB mappings are durable now, so the short-lived reservation
+            # leases can be removed without making the ports available.
+            for allocated_port in allocated:
+                cache.commit_port_reservation(allocated_port)
             return True, "success"
         except Exception as exc:
             db.session.rollback()
-            # Remove any partially applied FRP entries before returning their ports.
+
+            # Only free a port after FRP confirms its route is absent and the
+            # persisted DB mapping has been cleared. If either step fails, the
+            # database mapping keeps ownership of the port for later cleanup.
+            routes_removed = False
             try:
                 self.reload(exclude=container.uuid)
+                routes_removed = True
             except Exception:
-                pass
-            for mapping in container.port_mappings:
-                if mapping.public_port in allocated:
-                    mapping.public_port = None
-            db.session.commit()
+                logging.exception(
+                    "Could not confirm removal of partially registered FRP routes "
+                    "for instance %s-%s",
+                    container.user_id,
+                    container.uuid,
+                )
+
+            mappings_cleared = False
+            if routes_removed:
+                try:
+                    for mapping in container.port_mappings:
+                        if mapping.public_port in allocated:
+                            mapping.public_port = None
+                    db.session.commit()
+                    mappings_cleared = True
+                except Exception:
+                    db.session.rollback()
+                    logging.exception(
+                        "Could not clear port mappings after FRP registration failure"
+                    )
+
             for allocated_port in allocated:
-                cache.add_available_port(allocated_port)
+                try:
+                    if mappings_cleared:
+                        # Return the port and clear only this operation's lease
+                        # atomically. A stale request must not release a newer
+                        # allocation that happens to reuse the same port.
+                        cache.return_port_reservation(allocated_port)
+                    else:
+                        # The DB mapping still owns this port; release only this
+                        # operation's temporary lease so reconciliation can rely
+                        # on the durable database ownership record.
+                        cache.commit_port_reservation(allocated_port)
+                except Exception:
+                    logging.exception(
+                        "Could not reconcile public port %s after FRP registration failure",
+                        allocated_port,
+                    )
+
             logging.log(
                 "whale", "Error registering multi-port FRP routes",
                 name=container.user.name if container.user else str(container.user_id),
                 challenge_id=container.challenge_id,
             )
+            if not routes_removed:
+                return False, (
+                    "FRP registration failed and route removal could not be confirmed. "
+                    "Allocated ports remain reserved; retry instance cleanup. "
+                    f"Details: {exc}"
+                )
+            if not mappings_cleared:
+                return False, (
+                    "FRP registration failed and port mappings could not be cleared. "
+                    "Allocated ports remain reserved for safety. "
+                    f"Details: {exc}"
+                )
             return False, f"Unable to register FRP routes: {exc}"
 
     def unregister(self, container: WhaleContainer):
@@ -264,4 +357,6 @@ class FrpRouter(BaseRouter):
             return False, "Unable to access frpc admin api"
         if response.status_code == 401:
             return False, "frpc admin api unauthorized"
+        if not 200 <= response.status_code < 300:
+            return False, f"frpc admin api returned HTTP {response.status_code}"
         return True, "Available"

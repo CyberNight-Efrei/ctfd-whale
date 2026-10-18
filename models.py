@@ -94,6 +94,22 @@ class DynamicDockerChallengePort(db.Model):
 
 
 class WhaleContainer(db.Model):
+    # Existing status column doubles as a durable lifecycle state without a
+    # schema migration. Historical rows defaulted to READY (1).
+    STATUS_PROVISIONING = 0
+    STATUS_READY = 1
+    STATUS_STARTING = 2
+    STATUS_CLEANUP_PENDING = 3
+    STATUS_STOPPING = 4
+
+    LIFECYCLE_STATES = {
+        STATUS_PROVISIONING: "provisioning",
+        STATUS_READY: "ready",
+        STATUS_STARTING: "starting",
+        STATUS_CLEANUP_PENDING: "cleanup_pending",
+        STATUS_STOPPING: "stopping",
+    }
+
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(None, db.ForeignKey("users.id"))
     challenge_id = db.Column(None, db.ForeignKey("challenges.id"))
@@ -120,6 +136,17 @@ class WhaleContainer(db.Model):
     )
 
     @property
+    def lifecycle_state(self):
+        # Existing rows with NULL status are treated as ready for compatibility.
+        if self.status is None:
+            return "ready"
+        try:
+            status = int(self.status)
+        except (TypeError, ValueError):
+            return "unknown"
+        return self.LIFECYCLE_STATES.get(status, "unknown")
+
+    @property
     def http_subdomain(self):
         return Template(
             get_config("whale:template_http_subdomain", "{{ container.uuid }}")
@@ -128,6 +155,7 @@ class WhaleContainer(db.Model):
     def __init__(self, user_id, challenge_id):
         self.user_id = user_id
         self.challenge_id = challenge_id
+        self.status = self.STATUS_PROVISIONING
         self.start_time = datetime.now()
         self.renew_count = 0
         self.uuid = str(uuid.uuid4())

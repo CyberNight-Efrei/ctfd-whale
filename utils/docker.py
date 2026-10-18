@@ -1,4 +1,5 @@
 import json
+import logging
 import random
 import uuid
 from collections import OrderedDict
@@ -14,7 +15,14 @@ from .db import DBContainer
 
 
 def get_docker_client():
-    if get_config("whale:docker_use_ssl", False):
+    docker_api_url = get_config(
+        "whale:docker_api_url", "unix:///var/run/docker.sock"
+    )
+    docker_use_ssl = get_config("whale:docker_use_ssl", False)
+    if isinstance(docker_use_ssl, str):
+        docker_use_ssl = docker_use_ssl.strip().lower() in ("1", "true", "yes", "on")
+
+    if docker_use_ssl:
         tls_config = docker.tls.TLSConfig(
             verify=True,
             ca_cert=get_config("whale:docker_ssl_ca_cert") or None,
@@ -24,11 +32,11 @@ def get_docker_client():
             ),
         )
         return docker.DockerClient(
-            base_url=get_config("whale:docker_api_url"),
+            base_url=docker_api_url,
             tls=tls_config,
         )
     else:
-        return docker.DockerClient(base_url=get_config("whale:docker_api_url"))
+        return docker.DockerClient(base_url=docker_api_url)
 
 
 class DockerUtils:
@@ -52,10 +60,25 @@ class DockerUtils:
 
     @staticmethod
     def add_container(container):
-        if container.challenge.docker_image.startswith("{"):
-            DockerUtils._create_grouped_container(DockerUtils.client, container)
-        else:
-            DockerUtils._create_standalone_container(DockerUtils.client, container)
+        try:
+            if container.challenge.docker_image.lstrip().startswith("{"):
+                DockerUtils._create_grouped_container(DockerUtils.client, container)
+            else:
+                DockerUtils._create_standalone_container(DockerUtils.client, container)
+        except Exception:
+            # Service creation can partially succeed (for example, when saving
+            # the selected node fails after Docker has created the service).
+            # Best-effort cleanup here is repeated by the lifecycle coordinator
+            # if it cannot confirm that all resources were removed.
+            try:
+                DockerUtils.remove_container(container)
+            except Exception:
+                logging.exception(
+                    "Docker cleanup after failed creation also failed for Whale instance %s-%s",
+                    container.user_id,
+                    container.uuid,
+                )
+            raise
 
     @staticmethod
     def _create_standalone_container(client, container):
@@ -86,66 +109,141 @@ class DockerUtils:
 
     @staticmethod
     def _create_grouped_container(client, container):
-        range_prefix = CacheProvider(app=current_app).get_available_network_range()
-
-        ipam_pool = docker.types.IPAMPool(subnet=range_prefix)
-        ipam_config = docker.types.IPAMConfig(
-            driver='default', pool_configs=[ipam_pool])
-        network_name = f'{container.user_id}-{container.uuid}'
-        network = client.networks.create(
-            network_name, internal=True,
-            ipam=ipam_config, attachable=True,
-            labels={'prefix': range_prefix},
-            driver="overlay", scope="swarm"
-        )
-
-        dns = []
-        containers = get_config("whale:docker_auto_connect_containers", "").split(",")
-        for c in containers:
-            if not c:
-                continue
-            network.connect(c)
-            if "dns" in c:
-                network.reload()
-                for name in network.attrs['Containers']:
-                    if network.attrs['Containers'][name]['Name'] == c:
-                        dns.append(network.attrs['Containers'][name]['IPv4Address'].split('/')[0])
-
-        has_processed_main = False
         try:
             images = json.loads(
                 container.challenge.docker_image,
-                object_pairs_hook=OrderedDict
+                object_pairs_hook=OrderedDict,
             )
-        except json.JSONDecodeError:
+        except (TypeError, json.JSONDecodeError) as exc:
             raise WhaleError(
                 "Challenge Image Parse Error\n"
-                "plase check the challenge image string"
+                "Please check the challenge image JSON."
+            ) from exc
+        if not isinstance(images, dict) or not images:
+            raise WhaleError("Grouped challenge images must be a non-empty JSON object.")
+
+        cache_provider = CacheProvider(app=current_app)
+        range_prefix = cache_provider.get_available_network_range()
+        if not range_prefix:
+            raise WhaleError(
+                "No Docker subnet is available for a grouped challenge. "
+                "Check the configured subnet range and existing Swarm networks."
             )
-        for name, image in images.items():
-            if has_processed_main:
-                container_name = f'{container.user_id}-{uuid.uuid4()}'
-            else:
-                container_name = f'{container.user_id}-{container.uuid}'
-                node = DockerUtils.choose_node(image, get_config("whale:docker_swarm_nodes", "").split(","))
-                has_processed_main = True
-            client.services.create(
-                image=image, name=container_name, networks=[
-                    docker.types.NetworkAttachmentConfig(network_name, aliases=[name])
-                ],
-                env={'FLAG': container.flag},
-                dns_config=docker.types.DNSConfig(nameservers=dns),
-                resources=docker.types.Resources(
-                    mem_limit=DockerUtils.convert_readable_text(
-                        container.challenge.memory_limit
+
+        whale_id = f"{container.user_id}-{container.uuid}"
+        network_name = whale_id
+        try:
+            ipam_pool = docker.types.IPAMPool(subnet=range_prefix)
+            ipam_config = docker.types.IPAMConfig(
+                driver="default", pool_configs=[ipam_pool]
+            )
+            network = client.networks.create(
+                network_name,
+                internal=True,
+                ipam=ipam_config,
+                attachable=True,
+                labels={"prefix": range_prefix, "whale_id": whale_id},
+                driver="overlay",
+                scope="swarm",
+            )
+
+            dns = []
+            containers = get_config("whale:docker_auto_connect_containers", "").split(",")
+            for external_container in containers:
+                if not external_container:
+                    continue
+                network.connect(external_container)
+                if "dns" in external_container:
+                    network.reload()
+                    for _, details in (network.attrs.get("Containers") or {}).items():
+                        if details.get("Name") == external_container:
+                            address = details.get("IPv4Address", "")
+                            if address:
+                                dns.append(address.split("/")[0])
+
+            has_processed_main = False
+            for name, image in images.items():
+                if has_processed_main:
+                    service_name = f"{container.user_id}-{uuid.uuid4()}"
+                else:
+                    service_name = whale_id
+                    node = DockerUtils.choose_node(
+                        image,
+                        get_config("whale:docker_swarm_nodes", "").split(","),
+                    )
+                    has_processed_main = True
+
+                client.services.create(
+                    image=image,
+                    name=service_name,
+                    networks=[
+                        docker.types.NetworkAttachmentConfig(
+                            network_name, aliases=[name]
+                        )
+                    ],
+                    env={"FLAG": container.flag},
+                    dns_config=docker.types.DNSConfig(nameservers=dns),
+                    resources=docker.types.Resources(
+                        mem_limit=DockerUtils.convert_readable_text(
+                            container.challenge.memory_limit
+                        ),
+                        cpu_limit=int(container.challenge.cpu_limit * 1e9),
                     ),
-                    cpu_limit=int(container.challenge.cpu_limit * 1e9)),
-                labels={
-                    'whale_id': f'{container.user_id}-{container.uuid}'
-                },  # for container deletion
-                hostname=name, constraints=['node.labels.name==' + node],
-                endpoint_spec=docker.types.EndpointSpec(mode='dnsrr', ports={})
-            )
+                    labels={"whale_id": whale_id},
+                    hostname=name,
+                    constraints=["node.labels.name==" + node],
+                    endpoint_spec=docker.types.EndpointSpec(mode="dnsrr", ports={}),
+                )
+
+            # Keep the subnet reserved until the network and every service have
+            # been created. The network label then becomes the durable record.
+            cache_provider.commit_network_reservation(range_prefix)
+        except Exception:
+            cleanup_complete = True
+            try:
+                services = client.services.list(filters={"label": f"whale_id={whale_id}"})
+                for service in services:
+                    try:
+                        service.remove()
+                    except Exception:
+                        cleanup_complete = False
+                        logging.exception(
+                            "Failed removing partially created Whale service %s",
+                            getattr(service, "name", getattr(service, "id", "unknown")),
+                        )
+            except Exception:
+                cleanup_complete = False
+                logging.exception("Unable to enumerate partially created Whale services")
+
+            try:
+                networks = client.networks.list(names=[network_name])
+                for partial_network in networks:
+                    try:
+                        partial_network.remove()
+                    except Exception:
+                        cleanup_complete = False
+                        logging.exception(
+                            "Failed removing partially created Whale network %s",
+                            network_name,
+                        )
+                remaining = client.networks.list(names=[network_name])
+                if remaining:
+                    cleanup_complete = False
+            except Exception:
+                cleanup_complete = False
+                logging.exception("Unable to verify cleanup of Whale network %s", network_name)
+
+            if cleanup_complete:
+                try:
+                    # Remove only this request's reservation and return the
+                    # subnet atomically after Docker confirms cleanup.
+                    cache_provider.return_network_reservation(range_prefix)
+                except Exception:
+                    logging.exception("Failed returning subnet %s to the pool", range_prefix)
+            # If cleanup could not be confirmed, keep the allocation reserved.
+            # Its lease expires eventually; reconciliation also checks network
+            # labels before making a subnet available again.
+            raise
 
     @staticmethod
     def remove_container(container):
@@ -159,13 +257,20 @@ class DockerUtils:
             auto_containers = get_config("whale:docker_auto_connect_containers", "").split(",")
             redis_util = CacheProvider(app=current_app)
             for network in networks:
-                for container in auto_containers:
+                for external_container in auto_containers:
+                    if not external_container:
+                        continue
                     try:
-                        network.disconnect(container, force=True)
+                        network.disconnect(external_container, force=True)
                     except Exception:
+                        # The container may already have been disconnected.
                         pass
-                redis_util.add_available_network_range(network.attrs['Labels']['prefix'])
+                prefix = (network.attrs.get("Labels") or {}).get("prefix")
                 network.remove()
+                # Never put a subnet back into the pool before Docker confirms
+                # that its network has been removed.
+                if prefix:
+                    redis_util.add_available_network_range(prefix)
 
     @staticmethod
     def get_instance_statuses(containers):

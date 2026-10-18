@@ -20,6 +20,7 @@
                             <small class="whale-status-detail">{{ runtime_status.services_found }}/{{ runtime_status.services_expected }} services</small>
                         {% endif %}
                         <small class="whale-status-context">Based on Docker Swarm task state, not application health.</small>
+                        <small class="whale-status-context">Lifecycle: {{ container.lifecycle_state|replace('_', ' ')|title }}</small>
                     </div>
 
                     <a class="btn btn-sm btn-outline-secondary whale-instance-card-user" href="{{ url_for('admin.users_detail', user_id=container.user.id) }}">

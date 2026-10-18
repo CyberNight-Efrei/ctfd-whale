@@ -29,6 +29,7 @@ class CacheProvider:
     _lifecycle_locks = {}
     _lifecycle_locks_guard = threading.Lock()
     _capacity_lock = threading.Lock()
+    _router_reload_lock = threading.Lock()
     _local_pool_lock = threading.RLock()
 
     def __init__(self, app, *args, **kwargs):
@@ -265,6 +266,12 @@ class CacheProvider:
     def release_capacity_lock(self):
         return self.provider.release_capacity_lock()
 
+    def acquire_router_reload_lock(self):
+        return self.provider.acquire_router_reload_lock()
+
+    def release_router_reload_lock(self):
+        return self.provider.release_router_reload_lock()
+
     def __getattr__(self, name):
         return self.provider.__getattribute__(name)
 
@@ -285,6 +292,7 @@ class FilesystemCacheProvider:
         self.network_reservation_key = NETWORK_POOL_KEY + "-reservations"
         self.current_lifecycle_lock = None
         self.current_capacity_lock = False
+        self.current_router_reload_lock = False
         self._owned_port_reservations = {}
         self._owned_network_reservations = {}
 
@@ -462,6 +470,19 @@ class FilesystemCacheProvider:
         CacheProvider._capacity_lock.release()
         return True
 
+    def acquire_router_reload_lock(self):
+        if not CacheProvider._router_reload_lock.acquire(timeout=10):
+            return False
+        self.current_router_reload_lock = True
+        return True
+
+    def release_router_reload_lock(self):
+        if not self.current_router_reload_lock:
+            return False
+        self.current_router_reload_lock = False
+        CacheProvider._router_reload_lock.release()
+        return True
+
     def acquire_lock(self):
         return True
 
@@ -476,6 +497,7 @@ class RedisCacheProvider(FlaskRedis):
         self.current_lock = None
         self.current_lifecycle_lock = None
         self.current_capacity_lock = None
+        self.current_router_reload_lock = None
         self._owned_port_reservations = {}
         self._owned_network_reservations = {}
         self.global_port_key = PORT_POOL_KEY
@@ -757,6 +779,26 @@ class RedisCacheProvider(FlaskRedis):
     def release_capacity_lock(self):
         lock = self.current_capacity_lock
         self.current_capacity_lock = None
+        if lock is None:
+            return False
+        try:
+            lock.release()
+            return True
+        except LockError:
+            return False
+
+    def acquire_router_reload_lock(self):
+        # FRP's config API replaces the complete route set, so updates must be
+        # serialized across workers to prevent concurrent writes from losing routes.
+        lock = self.lock(name="ctfd_whale_router-reload", timeout=120)
+        if not lock.acquire(blocking=True, blocking_timeout=10.0):
+            return False
+        self.current_router_reload_lock = lock
+        return True
+
+    def release_router_reload_lock(self):
+        lock = self.current_router_reload_lock
+        self.current_router_reload_lock = None
         if lock is None:
             return False
         try:

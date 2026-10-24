@@ -161,7 +161,9 @@ class FrpRouter(BaseRouter):
                     f'<a target="_blank" rel="noopener noreferrer" href="{html.escape(href, quote=True)}">'
                     f'{html.escape(host_display)}</a> (HTTP)</li>'
                 )
-                rows.append((mapping.name, "HTTP", str(mapping.internal_port), http_port or "80", host_display))
+                rows.append(
+                    (mapping.name, "HTTP", str(mapping.internal_port), http_port or "80", host_display)
+                )
             elif mapping.protocol == "ssh":
                 public_port = mapping.public_port
                 user = html.escape(str(container.challenge.user or "user"))
@@ -171,7 +173,9 @@ class FrpRouter(BaseRouter):
                     f'<li><strong>{name}</strong> — <code class="click-copy">{safe_command}</code>'
                     f' (SSH)</li>'
                 )
-                rows.append((mapping.name, "SSH", str(mapping.internal_port), str(public_port or ""), str(host)))
+                rows.append(
+                    (mapping.name, "SSH", str(mapping.internal_port), str(public_port or ""), str(host))
+                )
             else:
                 public_port = mapping.public_port
                 command = f"nc {safe_host} {public_port}"
@@ -180,7 +184,9 @@ class FrpRouter(BaseRouter):
                     f'<li><strong>{name}</strong> — <code class="click-copy">{safe_command}</code>'
                     f' (TCP)</li>'
                 )
-                rows.append((mapping.name, "TCP", str(mapping.internal_port), str(public_port or ""), str(host)))
+                rows.append(
+                    (mapping.name, "TCP", str(mapping.internal_port), str(public_port or ""), str(host))
+                )
 
         port_table_rows = "".join(
             "<tr>" + "".join(
@@ -208,7 +214,10 @@ class FrpRouter(BaseRouter):
             + "</ul>"
             + '<hr><h6><u>Port mapping</u></h6>'
             + '<div class="table-responsive"><table class="table table-bordered table-sm">'
-            + '<thead><tr><th>Service</th><th>Protocol</th><th>Internal port</th><th>Public port</th><th>Access</th></tr></thead>'
+            + (
+                '<thead><tr><th>Service</th><th>Protocol</th><th>Internal port</th>'
+                '<th>Public port</th><th>Access</th></tr></thead>'
+            )
             + "<tbody>" + port_table_rows + "</tbody></table></div>"
             + (
                 '<hr><table class="table table-bordered table-sm"><tr>'

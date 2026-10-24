@@ -142,7 +142,6 @@ class FrpRouter(BaseRouter):
         http_port = str(get_config("whale:frp_http_port", "80"))
         domain_suffix = get_config("whale:frp_http_domain_suffix", "")
         safe_host = html.escape(str(host))
-        rows = []
         cards = []
 
         for mapping in mappings:

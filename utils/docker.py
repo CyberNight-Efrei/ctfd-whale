@@ -273,6 +273,66 @@ class DockerUtils:
                     redis_util.add_available_network_range(prefix)
 
     @staticmethod
+    def get_instance_logs(container, tail=200):
+        """Return recent logs from the Swarm services belonging to one Whale instance."""
+        whale_id = f"{container.user_id}-{container.uuid}"
+        client = getattr(DockerUtils, "client", None) or get_docker_client()
+        services = client.services.list(filters={"label": f"whale_id={whale_id}"})
+        results = []
+
+        for service in services:
+            attrs = getattr(service, "attrs", {}) or {}
+            spec = attrs.get("Spec", {}) or {}
+            labels = spec.get("Labels") or {}
+            if labels.get("whale_id") != whale_id:
+                continue
+
+            service_id = getattr(service, "id", None) or attrs.get("ID")
+            service_name = (
+                spec.get("Name")
+                or getattr(service, "name", None)
+                or service_id
+                or "unknown"
+            )
+            try:
+                output = service.logs(
+                    stdout=True,
+                    stderr=True,
+                    timestamps=True,
+                    tail=tail,
+                    follow=False,
+                )
+                if isinstance(output, bytes):
+                    log_text = output.decode("utf-8", errors="replace")
+                elif isinstance(output, str):
+                    log_text = output
+                else:
+                    chunks = list(output)
+                    if all(isinstance(chunk, bytes) for chunk in chunks):
+                        log_text = b"".join(chunks).decode("utf-8", errors="replace")
+                    else:
+                        log_text = "".join(
+                            chunk.decode("utf-8", errors="replace")
+                            if isinstance(chunk, bytes)
+                            else str(chunk)
+                            for chunk in chunks
+                        )
+                results.append({"name": str(service_name), "logs": log_text})
+            except Exception:
+                logging.exception(
+                    "Unable to retrieve logs for Whale service %s (instance %s)",
+                    service_name,
+                    container.id,
+                )
+                results.append({
+                    "name": str(service_name),
+                    "logs": "",
+                    "error": "Unable to retrieve logs for this service.",
+                })
+
+        return results
+
+    @staticmethod
     def get_instance_statuses(containers):
         """Read Docker Swarm task state for instances shown in the admin UI.
 

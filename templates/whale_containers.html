@@ -157,6 +157,43 @@
             </div>
         {% endif %}
     </section>
+
+        <div class="modal fade" id="whale-container-logs-modal" tabindex="-1" role="dialog"
+             aria-labelledby="whale-container-logs-title" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <div>
+                            <h5 class="modal-title" id="whale-container-logs-title">Container logs</h5>
+                            <small class="text-muted">Recent output from Docker Swarm services</small>
+                        </div>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="whale-logs-toolbar">
+                            <label for="whale-container-logs-tail" class="mb-0">Lines per service</label>
+                            <select class="form-control form-control-sm" id="whale-container-logs-tail">
+                                <option value="100">100</option>
+                                <option value="200" selected>200</option>
+                                <option value="500">500</option>
+                                <option value="1000">1000</option>
+                            </select>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="whale-container-logs-refresh">
+                                <i class="fas fa-sync-alt mr-1" aria-hidden="true"></i>Refresh
+                            </button>
+                        </div>
+                        <p id="whale-container-logs-status" class="text-muted small" role="status">Loading logs…</p>
+                        <div id="whale-container-logs-content"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
 {% endblock %}
 
 {% block scripts %}

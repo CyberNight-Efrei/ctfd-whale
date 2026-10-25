@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import request
+from flask import current_app, request
 from flask_restx import Namespace, Resource, abort
 
 from CTFd.utils import get_config
@@ -8,8 +8,10 @@ from CTFd.utils import user as current_user
 from CTFd.utils.decorators import admins_only, authed_only
 
 from .decorators import challenge_visible, frequency_limited
+from .models import WhaleContainer
 from .utils.control import ControlUtil
 from .utils.db import DBContainer
+from .utils.docker import DockerUtils
 from .utils.routers import Router
 
 admin_namespace = Namespace("ctfd-whale-admin")
@@ -61,6 +63,42 @@ class AdminContainers(Resource):
         user_id = request.args.get('user_id')
         result, message = ControlUtil.try_remove_container(user_id)
         return {'success': result, 'message': message}
+
+
+
+@admin_namespace.route("/container/<int:container_id>/logs")
+class AdminContainerLogs(Resource):
+    @staticmethod
+    @admins_only
+    def get(container_id):
+        container = WhaleContainer.query.filter_by(id=container_id).first()
+        if container is None:
+            abort(404, "Instance not found.", success=False)
+
+        requested_tail = request.args.get("tail", 200, type=int)
+        tail = max(1, min(requested_tail or 200, 1000))
+
+        try:
+            services = DockerUtils.get_instance_logs(container, tail=tail)
+        except Exception:
+            current_app.logger.exception(
+                "Unable to retrieve Docker logs for Whale instance %s",
+                container.id,
+            )
+            abort(
+                502,
+                "Docker logs are currently unavailable. Check the CTFd server logs.",
+                success=False,
+            )
+
+        return {
+            "success": True,
+            "data": {
+                "container_id": container.id,
+                "tail": tail,
+                "services": services,
+            },
+        }
 
 
 @user_namespace.route("/container")

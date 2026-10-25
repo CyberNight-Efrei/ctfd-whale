@@ -142,7 +142,6 @@ class FrpRouter(BaseRouter):
         http_port = str(get_config("whale:frp_http_port", "80"))
         domain_suffix = get_config("whale:frp_http_domain_suffix", "")
         safe_host = html.escape(str(host))
-        rows = []
         cards = []
 
         for mapping in mappings:
@@ -161,7 +160,6 @@ class FrpRouter(BaseRouter):
                     f'<a target="_blank" rel="noopener noreferrer" href="{html.escape(href, quote=True)}">'
                     f'{html.escape(host_display)}</a> (HTTP)</li>'
                 )
-                rows.append((name, "HTTP", str(mapping.internal_port), host_display))
             elif mapping.protocol == "ssh":
                 public_port = mapping.public_port
                 user = html.escape(str(container.challenge.user or "user"))
@@ -171,7 +169,6 @@ class FrpRouter(BaseRouter):
                     f'<li><strong>{name}</strong> — <code class="click-copy">{safe_command}</code>'
                     f' (SSH)</li>'
                 )
-                rows.append((name, "SSH", str(mapping.internal_port), str(public_port or "")))
             else:
                 public_port = mapping.public_port
                 command = f"nc {safe_host} {public_port}"
@@ -180,13 +177,23 @@ class FrpRouter(BaseRouter):
                     f'<li><strong>{name}</strong> — <code class="click-copy">{safe_command}</code>'
                     f' (TCP)</li>'
                 )
-                rows.append((name, "TCP", str(mapping.internal_port), str(public_port or "")))
 
         challenge_data = {
             "User": container.challenge.user,
             "Password": container.challenge.password,
             "Direct host": safe_host,
         }
+        for mapping in mappings:
+            if mapping.protocol == "http":
+                public_port = http_port or "80"
+            else:
+                public_port = mapping.public_port
+            port_key = (
+                "Public port"
+                if len(mappings) == 1
+                else f"Public port ({mapping.name})"
+            )
+            challenge_data[port_key] = public_port
         detail_rows = []
         for key, value in challenge_data.items():
             if value is not None and str(value).strip():

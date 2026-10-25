@@ -98,6 +98,87 @@ $(document).on("click", ".click-copy", async function (event) {
     await copyToClipboard(this, value);
 });
 
+
+async function load_container_logs(container_id) {
+    const tail = Number($("#whale-container-logs-tail").val()) || 200;
+    const content = $("#whale-container-logs-content");
+    const status = $("#whale-container-logs-status");
+    const refreshButton = $("#whale-container-logs-refresh");
+
+    content.empty();
+    status.text("Loading the last " + tail + " lines per service…");
+    refreshButton.prop("disabled", true);
+
+    try {
+        const url = "/api/v1/plugins/ctfd-whale/admin/container/"
+            + encodeURIComponent(container_id)
+            + "/logs?tail=" + encodeURIComponent(tail);
+        const response = await CTFd.fetch(url, {
+            method: "GET",
+            credentials: "same-origin",
+            headers: { Accept: "application/json" }
+        });
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+            throw new Error(result.message || "Unable to load container logs.");
+        }
+
+        const services = (result.data && result.data.services) || [];
+        if (services.length === 0) {
+            content.append(
+                $("<p>").addClass("text-muted").text(
+                    "No Docker services were found for this instance. It may already have been removed."
+                )
+            );
+        } else {
+            services.forEach(function (service) {
+                const section = $("<section>").addClass("whale-log-service");
+                section.append($("<h6>").text(service.name || "Docker service"));
+                if (service.error) {
+                    section.append(
+                        $("<div>").addClass("alert alert-warning py-2").text(service.error)
+                    );
+                } else if (!service.logs) {
+                    section.append(
+                        $("<pre>").addClass("whale-log-output").text("(No log output returned.)")
+                    );
+                } else {
+                    section.append(
+                        $("<pre>").addClass("whale-log-output").text(service.logs)
+                    );
+                }
+                content.append(section);
+            });
+        }
+        status.text("Showing up to " + result.data.tail + " lines per service.");
+    } catch (error) {
+        status.text(error.message || "An error occurred while loading logs.");
+    } finally {
+        refreshButton.prop("disabled", false);
+    }
+}
+
+$(document).on("click", ".view-container-logs", async function () {
+    const container_id = $(this).attr("data-container-id");
+    if (!container_id) return;
+
+    $("#whale-container-logs-title").text("Logs — instance #" + container_id);
+    $("#whale-container-logs-refresh").attr("data-container-id", container_id);
+    $("#whale-container-logs-modal").modal("show");
+    await load_container_logs(container_id);
+});
+
+$("#whale-container-logs-refresh").on("click", async function () {
+    const container_id = $(this).attr("data-container-id");
+    if (container_id) await load_container_logs(container_id);
+});
+
+$("#whale-container-logs-tail").on("change", async function () {
+    const container_id = $("#whale-container-logs-refresh").attr("data-container-id");
+    if (container_id) await load_container_logs(container_id);
+});
+
 async function delete_container(user_id) {
     let response = await CTFd.fetch("/api/v1/plugins/ctfd-whale/admin/container?user_id=" + user_id, {
         method: "DELETE",

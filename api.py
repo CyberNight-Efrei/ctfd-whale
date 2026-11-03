@@ -128,13 +128,31 @@ class UserContainers(Resource):
             state = lifecycle_state if lifecycle_state != "ready" else "stopping"
             return {
                 "success": True,
-                "data": {"lifecycle_state": state},
+                "data": {
+                    "lifecycle_state": state,
+                    "container_status": {"state": state},
+                },
             }
+
+        # Read the actual Docker Swarm task state for this player's instance.
+        # Only the public status fields are exposed; service IDs, task details,
+        # and diagnostics remain private to the administrator interface.
+        runtime_status = DockerUtils.get_instance_statuses([container]).get(
+            container.id, {}
+        )
+        if not isinstance(runtime_status, dict):
+            runtime_status = {}
+        container_status = {
+            "state": runtime_status.get("state", "unknown"),
+            "label": runtime_status.get("label", "Unknown"),
+            "style": runtime_status.get("style", "secondary"),
+        }
 
         return {
             'success': True,
             'data': {
                 'lifecycle_state': lifecycle_state,
+                'container_status': container_status,
                 'lan_domain': str(user_id) + "-" + container.uuid,
                 'user_access': Router.access(container),
                 'remaining_time': remaining_time,

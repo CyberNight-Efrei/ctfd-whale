@@ -13,6 +13,37 @@ CTFd._internal.challenge.postRender = function () {
 
 if (window.$ === undefined) window.$ = CTFd.lib.$;
 
+function updateContainerStatusBadge(state) {
+    var statuses = {
+        not_started: { label: "Not launched", badge: "badge-secondary" },
+        provisioning: { label: "Provisioning", badge: "badge-info" },
+        starting: { label: "Starting", badge: "badge-info" },
+        ready: { label: "Running", badge: "badge-success" },
+        running: { label: "Running", badge: "badge-success" },
+        stopping: { label: "Stopping", badge: "badge-warning" },
+        cleanup_pending: { label: "Cleanup pending", badge: "badge-warning" },
+        stopped: { label: "Stopped", badge: "badge-secondary" },
+        degraded: { label: "Degraded", badge: "badge-warning" },
+        error: { label: "Error", badge: "badge-danger" },
+        missing: { label: "Missing", badge: "badge-danger" },
+        unknown: { label: "Unknown", badge: "badge-secondary" }
+    };
+    var status = statuses[state] || statuses.unknown;
+    var badges = document.querySelectorAll(".whale-container-status-badge");
+    var badgeClasses = [
+        "badge-secondary", "badge-info", "badge-success",
+        "badge-warning", "badge-danger"
+    ];
+
+    badges.forEach(function (badge) {
+        badgeClasses.forEach(function (className) {
+            badge.classList.remove(className);
+        });
+        badge.classList.add(status.badge);
+        badge.textContent = status.label;
+    });
+}
+
 function loadInfo() {
     var challenge_id = CTFd._internal.challenge.data.id;
     var url = "/api/v1/plugins/ctfd-whale/container?challenge_id=" + challenge_id;
@@ -39,14 +70,31 @@ function loadInfo() {
             clearInterval(window.t);
             window.t = undefined;
         }
-        if (response.success) response = response.data;
-        else CTFd._functions.events.eventAlert({
-            title: "Fail",
-            html: response.message,
-            button: "OK"
-        });
+        if (!response || response.success !== true) {
+            updateContainerStatusBadge("unknown");
+            CTFd._functions.events.eventAlert({
+                title: "Fail",
+                html: response && response.message ? response.message : "Unable to retrieve the container status.",
+                button: "OK"
+            });
+            return;
+        }
 
-        if (response.lifecycle_state && response.lifecycle_state !== "ready") {
+        response = response.data || {};
+        if (!response.lifecycle_state) {
+            updateContainerStatusBadge("not_started");
+            if (window.whaleLifecyclePoll !== undefined) {
+                clearInterval(window.whaleLifecyclePoll);
+                window.whaleLifecyclePoll = undefined;
+            }
+            $('#whale-panel-started').hide();
+            $('#whale-panel-transition').hide();
+            $('#whale-panel-stopped').show();
+            return;
+        }
+
+        if (response.lifecycle_state !== "ready") {
+            updateContainerStatusBadge(response.lifecycle_state);
             const lifecycleMessages = {
                 provisioning: "Creating Docker services…",
                 starting: "Configuring access routes…",
@@ -72,6 +120,10 @@ function loadInfo() {
             window.whaleLifecyclePoll = undefined;
         }
         $('#whale-panel-transition').hide();
+        var runtimeStatus = response.container_status && response.container_status.state
+            ? response.container_status.state
+            : "running";
+        updateContainerStatusBadge(runtimeStatus);
 
         if (response.remaining_time != undefined) {
             $('#whale-challenge-user-access').html(response.user_access);

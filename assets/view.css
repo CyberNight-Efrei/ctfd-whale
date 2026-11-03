@@ -1,0 +1,69 @@
+/* Compact, consistently colored status badge on the player challenge card. */
+.whale-card-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    margin-bottom: 1rem;
+    text-align: left;
+}
+
+.whale-card-title {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.25;
+    font-weight: 600;
+}
+
+.whale-container-status-badge {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    padding: .28rem .55rem !important;
+    border: 0;
+    border-radius: 50rem;
+    font-size: .72rem !important;
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: .01em;
+    white-space: nowrap;
+    vertical-align: middle;
+    opacity: 1;
+}
+
+.whale-container-status-badge.whale-status-secondary {
+    background-color: #6c757d !important;
+    color: #fff !important;
+}
+
+.whale-container-status-badge.whale-status-info {
+    background-color: #0dcaf0 !important;
+    color: #052c37 !important;
+}
+
+.whale-container-status-badge.whale-status-success {
+    background-color: #198754 !important;
+    color: #fff !important;
+}
+
+.whale-container-status-badge.whale-status-warning {
+    background-color: #ffc107 !important;
+    color: #212529 !important;
+}
+
+.whale-container-status-badge.whale-status-danger {
+    background-color: #dc3545 !important;
+    color: #fff !important;
+}
+
+@media (max-width: 420px) {
+    .whale-card-heading {
+        gap: .5rem;
+    }
+
+    .whale-container-status-badge {
+        font-size: .68rem !important;
+        padding: .25rem .45rem !important;
+    }
+}

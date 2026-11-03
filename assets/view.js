@@ -15,31 +15,38 @@ if (window.$ === undefined) window.$ = CTFd.lib.$;
 
 function updateContainerStatusBadge(state) {
     var statuses = {
-        not_started: { label: "Not launched", badge: "badge-secondary" },
-        provisioning: { label: "Provisioning", badge: "badge-info" },
-        starting: { label: "Starting", badge: "badge-info" },
-        ready: { label: "Running", badge: "badge-success" },
-        running: { label: "Running", badge: "badge-success" },
-        stopping: { label: "Stopping", badge: "badge-warning" },
-        cleanup_pending: { label: "Cleanup pending", badge: "badge-warning" },
-        stopped: { label: "Stopped", badge: "badge-secondary" },
-        degraded: { label: "Degraded", badge: "badge-warning" },
-        error: { label: "Error", badge: "badge-danger" },
-        missing: { label: "Missing", badge: "badge-danger" },
-        unknown: { label: "Unknown", badge: "badge-secondary" }
+        not_started: { label: "Not launched", tone: "secondary", bootstrap: "bg-secondary badge-secondary" },
+        provisioning: { label: "Provisioning", tone: "info", bootstrap: "bg-info badge-info" },
+        starting: { label: "Starting", tone: "info", bootstrap: "bg-info badge-info" },
+        ready: { label: "Running", tone: "success", bootstrap: "bg-success badge-success" },
+        running: { label: "Running", tone: "success", bootstrap: "bg-success badge-success" },
+        stopping: { label: "Stopping", tone: "warning", bootstrap: "bg-warning badge-warning" },
+        cleanup_pending: { label: "Cleanup pending", tone: "warning", bootstrap: "bg-warning badge-warning" },
+        stopped: { label: "Stopped", tone: "secondary", bootstrap: "bg-secondary badge-secondary" },
+        degraded: { label: "Degraded", tone: "warning", bootstrap: "bg-warning badge-warning" },
+        error: { label: "Error", tone: "danger", bootstrap: "bg-danger badge-danger" },
+        missing: { label: "Missing", tone: "danger", bootstrap: "bg-danger badge-danger" },
+        unknown: { label: "Unknown", tone: "secondary", bootstrap: "bg-secondary badge-secondary" }
     };
     var status = statuses[state] || statuses.unknown;
     var badges = document.querySelectorAll(".whale-container-status-badge");
-    var badgeClasses = [
+    var statusClasses = [
+        "whale-status-secondary", "whale-status-info",
+        "whale-status-success", "whale-status-warning",
+        "whale-status-danger", "bg-secondary", "bg-info",
+        "bg-success", "bg-warning", "bg-danger",
         "badge-secondary", "badge-info", "badge-success",
         "badge-warning", "badge-danger"
     ];
 
     badges.forEach(function (badge) {
-        badgeClasses.forEach(function (className) {
+        statusClasses.forEach(function (className) {
             badge.classList.remove(className);
         });
-        badge.classList.add(status.badge);
+        badge.classList.add("whale-status-" + status.tone);
+        status.bootstrap.split(" ").forEach(function (className) {
+            badge.classList.add(className);
+        });
         badge.textContent = status.label;
     });
 }

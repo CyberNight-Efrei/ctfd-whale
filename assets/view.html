@@ -2,26 +2,27 @@
 
 {% block description %}
 {{ challenge.html }}
+    <link rel="stylesheet" href="/plugins/ctfd-whale/assets/view.css">
     <div class="row text-center pb-3">
         <div id="whale-panel" style="width: 100%;">
             <div id="whale-panel-stopped" class="card" style="width: 100%;">
                 <div class="card-body">
-                    <h5 class="card-title">
-                        Instance Info
-                        <span class="badge badge-secondary whale-container-status-badge"
+                    <div class="whale-card-heading">
+                        <h5 class="card-title whale-card-title">Instance Info</h5>
+                        <span class="badge rounded-pill whale-container-status-badge whale-status-secondary bg-secondary badge-secondary"
                               aria-live="polite">Not launched</span>
-                    </h5>
+                    </div>
                     <button class="btn btn-primary card-link" id="whale-button-boot" type="button"
                         onclick="CTFd._internal.challenge.boot()">Launch an instance</button>
                 </div>
             </div>
             <div id="whale-panel-transition" class="card" style="width: 100%; display: none;" aria-live="polite">
                 <div class="card-body">
-                    <h5 class="card-title">
-                        Instance Status
-                        <span class="badge badge-secondary whale-container-status-badge"
+                    <div class="whale-card-heading">
+                        <h5 class="card-title whale-card-title">Instance Status</h5>
+                        <span class="badge rounded-pill whale-container-status-badge whale-status-secondary bg-secondary badge-secondary"
                               aria-live="polite">Checking…</span>
-                    </h5>
+                    </div>
                     <p id="whale-lifecycle-message" class="card-text mb-0">
                         Checking instance state…
                     </p>
@@ -29,11 +30,11 @@
             </div>
             <div id="whale-panel-started" type="hidden" class="card" style="width: 100%;">
                 <div class="card-body">
-                    <h5 class="card-title">
-                        Instance Info
-                        <span class="badge badge-secondary whale-container-status-badge"
+                    <div class="whale-card-heading">
+                        <h5 class="card-title whale-card-title">Instance Info</h5>
+                        <span class="badge rounded-pill whale-container-status-badge whale-status-secondary bg-secondary badge-secondary"
                               aria-live="polite">Checking…</span>
-                    </h5>
+                    </div>
                     <h6 class="card-subtitle mb-2 text-muted">
                         Remaining Time: <span id="whale-challenge-count-down"></span>s
                     </h6>

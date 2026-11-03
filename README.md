@@ -38,3 +38,8 @@ refer to [installation guide](docs/install.md)
 ## Twin Project
 
 - [CTFd-Owl](https://github.com/D0g3-Lab/H1ve/tree/master/CTFd/plugins/ctfd-owl) (支持部署compose)
+
+
+## Player container status
+
+- On the player challenge card, a Bootstrap badge shows the user's container lifecycle and Docker Swarm runtime state (for example: Provisioning, Running, Degraded, or Error).

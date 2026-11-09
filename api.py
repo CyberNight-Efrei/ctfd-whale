@@ -116,7 +116,10 @@ class UserContainers(Resource):
         c = container.challenge # build a url for quick jump. todo: escape dash in categories and names.
         link = f'<a target="_blank" href="/challenges#{c.category}-{c.name}-{c.id}">{c.name}</a>'
         if int(container.challenge_id) != int(challenge_id):
-            return abort(403, f'Container already started but not from this challenge ({link})', success=False)
+            # The player has an instance, but it belongs to another challenge.
+            # Report no instance for this challenge so its UI shows only the
+            # launch panel, never controls for the unrelated instance.
+            return {'success': True, 'data': {}}
 
         lifecycle_state = container.lifecycle_state
         remaining_time = int(

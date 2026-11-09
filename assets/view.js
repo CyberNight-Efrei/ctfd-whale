@@ -78,7 +78,16 @@ function loadInfo() {
             window.t = undefined;
         }
         if (!response || response.success !== true) {
+            // Never leave controls from a previously opened challenge visible
+            // when this challenge's instance status cannot be loaded.
             updateContainerStatusBadge("unknown");
+            $('#whale-panel-started').hide();
+            $('#whale-panel-transition').hide();
+            $('#whale-panel-stopped').show();
+            if (window.whaleLifecyclePoll !== undefined) {
+                clearInterval(window.whaleLifecyclePoll);
+                window.whaleLifecyclePoll = undefined;
+            }
             CTFd._functions.events.eventAlert({
                 title: "Fail",
                 html: response && response.message ? response.message : "Unable to retrieve the container status.",

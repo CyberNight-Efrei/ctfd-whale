@@ -243,6 +243,10 @@ class DockerClusterMonitor:
             state = str(node_status.get("State") or "unknown").lower()
             availability = str(spec.get("Availability") or "active").lower()
             hostname = description.get("Hostname") or getattr(node, "hostname", None) or node_id
+            node_labels = spec.get("Labels") or {}
+            node_label_text = ", ".join(
+                f"{key}={value}" for key, value in sorted(node_labels.items())
+            )
             node_tasks = [
                 task for task in tasks_by_node.get(node_id, [])
                 if task.get("ServiceID") in frpc_service_ids
@@ -257,8 +261,8 @@ class DockerClusterMonitor:
                 if str((task.get("Status") or {}).get("State", "")).lower() == "running"
             ]
             if not frpc_services:
-                frpc_state = "unknown"
-                frpc_label = "FRPC non détecté"
+                frpc_state = "not_deployed"
+                frpc_label = "Aucun agent FRPC déployé sur ce nœud"
             elif running_tasks:
                 frpc_state = "running"
                 frpc_label = "FRPC actif"
@@ -275,18 +279,15 @@ class DockerClusterMonitor:
                 frpc_state = "unassigned"
                 frpc_label = "Aucune tâche FRPC affectée"
 
+            # Swarm membership and FRPC process health are separate signals.
+            # A worker remains connected when its node is Ready/Active even if
+            # FRPC is a singleton service elsewhere in the cluster.
             if state != "ready":
                 overall = "offline"
             elif availability != "active":
                 overall = "paused"
-            elif frpc_state == "running":
-                overall = "online"
-            elif frpc_state in ("error", "missing"):
-                overall = "error"
-            elif frpc_state == "starting":
-                overall = "starting"
             else:
-                overall = "unknown"
+                overall = "online"
 
             last_task_error = next(
                 (
@@ -301,16 +302,15 @@ class DockerClusterMonitor:
                 "name": str(hostname),
                 "state": state,
                 "availability": availability,
+                "node_labels": node_label_text,
                 "frpc_state": frpc_state,
                 "frpc_label": frpc_label,
                 "status": overall,
                 "status_label": {
-                    "online": "Connecté",
+                    "online": "Connecté au Swarm",
                     "offline": "Hors ligne",
                     "paused": "En pause / drain",
-                    "error": "FRPC indisponible",
-                    "starting": "FRPC en démarrage",
-                    "unknown": "État inconnu",
+                    "unknown": "État Swarm inconnu",
                 }.get(overall, "État inconnu"),
                 "task_error": last_task_error[:300],
                 "frpc_task_count": len(node_tasks),

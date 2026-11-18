@@ -11,19 +11,19 @@ version: "3.8"
 
 services:
   frps:
-    image: \${FRPS_IMAGE:-frankli0324/frp:frps}
+    image: ${FRPS_IMAGE:-frankli0324/frp:frps}
     command:
       - "--bind_addr=0.0.0.0"
-      - "--bind_port=\${FRP_SERVER_PORT:-7000}"
-      - "--token=\${FRP_TOKEN:?Set FRP_TOKEN before deploying}"
-      - "--subdomain_host=\${FRP_SUBDOMAIN_HOST:?Set FRP_SUBDOMAIN_HOST before deploying}"
-      - "--vhost_http_port=\${FRP_VHOST_HTTP_PORT:-8080}"
+      - "--bind_port=${FRP_SERVER_PORT:-7000}"
+      - "--token=${FRP_TOKEN:?Set FRP_TOKEN before deploying}"
+      - "--subdomain_host=${FRP_SUBDOMAIN_HOST:?Set FRP_SUBDOMAIN_HOST before deploying}"
+      - "--vhost_http_port=${FRP_VHOST_HTTP_PORT:-8080}"
     ports:
-      - "\${FRP_SERVER_PORT:-7000}:\${FRP_SERVER_PORT:-7000}/tcp"
-      - "\${FRP_VHOST_HTTP_PORT:-8080}:\${FRP_VHOST_HTTP_PORT:-8080}/tcp"
+      - "${FRP_SERVER_PORT:-7000}:${FRP_SERVER_PORT:-7000}/tcp"
+      - "${FRP_VHOST_HTTP_PORT:-8080}:${FRP_VHOST_HTTP_PORT:-8080}/tcp"
       # Keep this range aligned with whale:frp_direct_port_minimum /
       # whale:frp_direct_port_maximum. Remove it if direct TCP/SSH is unused.
-      - "\${FRP_DIRECT_PORT_RANGE:-10000-10100}:\${FRP_DIRECT_PORT_RANGE:-10000-10100}/tcp"
+      - "${FRP_DIRECT_PORT_RANGE:-10000-10100}:${FRP_DIRECT_PORT_RANGE:-10000-10100}/tcp"
     networks:
       frp:
         aliases:
@@ -39,11 +39,11 @@ services:
         window: 60s
 
   frpc:
-    image: \${FRPC_IMAGE:-frankli0324/frp:frpc}
+    image: ${FRPC_IMAGE:-frankli0324/frp:frpc}
     command:
       - "--server_addr=frps"
-      - "--server_port=\${FRP_SERVER_PORT:-7000}"
-      - "--token=\${FRP_TOKEN:?Set FRP_TOKEN before deploying}"
+      - "--server_port=${FRP_SERVER_PORT:-7000}"
+      - "--token=${FRP_TOKEN:?Set FRP_TOKEN before deploying}"
       - "--admin_addr=0.0.0.0"
       - "--admin_port=7400"
     ports:
@@ -79,4 +79,4 @@ networks:
   # services to (whale:docker_auto_connect_network).
   containers:
     external: true
-    name: \${CTFD_CONTAINERS_NETWORK:-ctfd_frp-containers}
+    name: ${CTFD_CONTAINERS_NETWORK:-ctfd_frp-containers}

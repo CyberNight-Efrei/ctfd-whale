@@ -206,14 +206,14 @@ Use a matching FRP release for FRPS and FRPC. The example stack requires \`FRPS_
 From the manager, first build and push the custom FRPS image from the machine/directory containing its Dockerfile (or copy that build context to a build host):
 
 \`\`\`bash
-docker build -t registry.example.org/frps:<version> .
-docker push registry.example.org/frps:<version>
+docker build -t registry.example.org/frps:your-tag .
+docker push registry.example.org/frps:your-tag
 \`\`\`
 
 Then, from the manager:
 
 \`\`\`bash
-export FRPS_IMAGE='registry.example.org/frps:<version>'
+export FRPS_IMAGE='registry.example.org/frps:your-tag'
 export FRPC_IMAGE='frankli0324/frp:frpc'
 export FRP_TOKEN='replace-with-a-long-random-token'
 export FRP_SUBDOMAIN_HOST='challenges.cybn.fr'
@@ -228,6 +228,8 @@ docker stack deploy -c docker-stack.frp.example.yml whale-frp
 The stack runs one FRPS replica on hostname \`frps\` and one FRPC replica on hostname \`ctfd\`. FRPC reaches FRPS using the private overlay DNS alias \`frps\`; the public name \`challenges.cybn.fr\` is the HTTP subdomain suffix, not the FRPC control-plane address.
 
 The FRPC admin API is published on port 7400 in host mode on the \`ctfd\` node. Configure \`whale:frp_api_url\` with the private IP of that node, and verify reachability **from inside the CTFd container**. Restrict access to TCP/7400 with the host firewall. The current CTFd-Whale FRP router does not send HTTP Basic credentials to the FRPC API, so \`admin_user\` and \`admin_pwd\` must remain empty unless the plugin is also updated to authenticate.
+
+Before starting the Swarm stack, stop the old standalone Compose containers: the existing FRPS on node frps already owns ports 7000, 8000 and 10000-10500, and an existing FRPC on node ctfd may already own port 7400. Stop any other standalone FRPC agents as well; this design intentionally replaces them with the single Swarm-managed FRPC on ctfd. Do not leave the old agents running alongside the new stack.
 
 The FRPS published ports use the Swarm ingress routing mesh in this example. That means the published ports are reachable on every Swarm node, not only on the node hosting the FRPS task. Point public DNS to the FRPS node and configure firewalls so the FRP public ports are exposed only where intended. If you require host-only publication, use Swarm host publishing for the individual ports; keep in mind that a large direct-port range needs special handling because range publishing and host mode are not supported uniformly across Docker/Compose versions.
 

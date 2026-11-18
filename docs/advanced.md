@@ -158,38 +158,38 @@ Now you can add a challenge to test it out.
 
 ## Deploy FRPC and FRPS as Docker Swarm services
 
-The monitoring page reads Swarm nodes, services and tasks from the manager Docker API. A container started with \`docker compose up\` on a worker is a standalone container on that worker's local Docker daemon: it is not a Swarm service, and the manager cannot retrieve its logs through the Swarm service API.
+The monitoring page reads Swarm nodes, services and tasks from the manager Docker API. A container started with `docker compose up` on a worker is a standalone container on that worker's local Docker daemon: it is not a Swarm service, and the manager cannot retrieve its logs through the Swarm service API.
 
-The Compose file itself does **not** have to be copied to the workers. Run \`docker stack deploy\` on a manager with the stack file available locally. Swarm stores the service specifications and schedules their tasks. Any bind-mounted file or directory is still node-local: it must exist at the same path on whichever node receives the task. See the [Docker stack deployment guide](https://docs.docker.com/engine/swarm/stack-deploy/).
+The Compose file itself does **not** have to be copied to the workers. Run `docker stack deploy` on a manager with the stack file available locally. Swarm stores the service specifications and schedules their tasks. Any bind-mounted file or directory is still node-local: it must exist at the same path on whichever node receives the task. See the [Docker stack deployment guide](https://docs.docker.com/engine/swarm/stack-deploy/).
 
 ### Recommended layout for CTFd-Whale
 
-The current FRP router has one setting, \`whale:frp_api_url\`, and sends every generated route configuration to one FRPC admin API. For that reason, the supported Swarm layout is:
+The current FRP router has one setting, `whale:frp_api_url`, and sends every generated route configuration to one FRPC admin API. For that reason, the supported Swarm layout is:
 
-- one FRPS service pinned to the node named \`frps\`;
-- one FRPC service pinned to the manager node named \`ctfd\`;
+- one FRPS service pinned to the node named `frps`;
+- one FRPC service pinned to the manager node named `ctfd`;
 - FRPC attached to the same attachable overlay network as the Whale challenge services, so it can reach challenge services regardless of which worker runs them;
 - FRPC and FRPS sharing a private overlay network.
 
-Do not deploy FRPC in \`global\` mode with the current router. A global FRPC service would create multiple independent clients, while the plugin only updates one admin API endpoint. The other clients would not receive the same route updates.
+Do not deploy FRPC in `global` mode with the current router. A global FRPC service would create multiple independent clients, while the plugin only updates one admin API endpoint. The other clients would not receive the same route updates.
 
-The example stack file is [\`docker-stack.frp.example.yml\`](../docker-stack.frp.example.yml). Review its image versions, token, public hostname, port range and network name before deploying.
+The example stack file is [`docker-stack.frp.example.yml`](../docker-stack.frp.example.yml). Review its image versions, token, public hostname, port range and network name before deploying.
 
-1. Ensure the challenge overlay network configured in \`whale:docker_auto_connect_network\` exists and is attachable. The example defaults to \`ctfd_frp-containers\`.
-2. On the Swarm manager (\`ctfd\`), export the required variables and deploy the stack:
+1. Ensure the challenge overlay network configured in `whale:docker_auto_connect_network` exists and is attachable. The example defaults to `ctfd_frp-containers`.
+2. On the Swarm manager (`ctfd`), export the required variables and deploy the stack:
 
-   \`\`\`bash
+   ```bash
    export FRP_TOKEN='replace-with-a-long-random-token'
    export FRP_SUBDOMAIN_HOST='challenges.example.org'
    export CTFD_CONTAINERS_NETWORK='ctfd_frp-containers'
    export FRP_DIRECT_PORT_RANGE='10000-10100'
    docker stack deploy -c docker-stack.frp.example.yml whale-frp
-   \`\`\`
+   ```
 
-3. Set \`whale:frp_api_url\` to \`http://<private-IP-of-ctfd>:7400\`. Port 7400 is published on the manager by the FRPC service; restrict access to it with the host firewall so only CTFd can reach it.
-4. Keep \`whale:frp_http_port\`, \`whale:frp_http_domain_suffix\`, \`whale:frp_direct_ip_address\` and the FRPS published ports consistent with the values in the stack.
-5. Verify from the manager with \`docker service ls\` and \`docker service ps whale-frp_frpc\` / \`docker service ps whale-frp_frps\`. The Whale monitoring page will then list both Swarm services and offer their aggregated logs.
+3. Set `whale:frp_api_url` to `http://<private-IP-of-ctfd>:7400`. Port 7400 is published on the manager by the FRPC service; restrict access to it with the host firewall so only CTFd can reach it.
+4. Keep `whale:frp_http_port`, `whale:frp_http_domain_suffix`, `whale:frp_direct_ip_address` and the FRPS published ports consistent with the values in the stack.
+5. Verify from the manager with `docker service ls` and `docker service ps whale-frp_frpc` / `docker service ps whale-frp_frps`. The Whale monitoring page will then list both Swarm services and offer their aggregated logs.
 
-The six challenge placement labels (for example \`name=worker-1\` through \`name=worker-6\`) remain independent of FRPC placement. Whale continues to use those labels when scheduling challenge instances.
+The six challenge placement labels (for example `name=worker-1` through `name=worker-6`) remain independent of FRPC placement. Whale continues to use those labels when scheduling challenge instances.
 
 If FRPC must remain on every worker for a non-overlay or node-local networking design, the plugin needs a separate multi-agent routing implementation: each FRPC admin API must be discovered and updated with only the routes assigned to its node. Merely changing the Compose deployment to a global service is not sufficient.

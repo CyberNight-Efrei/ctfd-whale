@@ -256,7 +256,7 @@ class DockerClusterMonitor:
             hostname = description.get("Hostname") or getattr(node, "hostname", None) or node_id
             node_labels = spec.get("Labels") or {}
             pool_label = str(node_labels.get("name") or "").strip()
-            if worker_pool_labels and pool_label and pool_label not in worker_pool_labels:
+            if worker_pool_labels and pool_label not in worker_pool_labels:
                 continue
             node_label_text = ", ".join(
                 f"{key}={value}" for key, value in sorted(node_labels.items())

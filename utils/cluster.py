@@ -1,5 +1,7 @@
 """Read-only monitoring of Docker Swarm workers and FRP workloads."""
 
+from CTFd.utils import get_config
+
 from .docker import DockerUtils, get_docker_client
 
 
@@ -225,6 +227,15 @@ class DockerClusterMonitor:
         frpc_entries = frpc_services + local_frpc
 
         workers = []
+        # The plugin schedules challenge instances only on nodes whose
+        # node.labels.name value is listed in whale:docker_swarm_nodes.
+        # Use that same pool for this view so dedicated FRPS nodes are not
+        # mistaken for challenge workers.
+        worker_pool_labels = {
+            item.strip()
+            for item in str(get_config("whale:docker_swarm_nodes", "") or "").split(",")
+            if item.strip()
+        }
         frpc_service_ids = {
             item["id"] for item in frpc_services if item.get("id")
         }
@@ -244,6 +255,9 @@ class DockerClusterMonitor:
             availability = str(spec.get("Availability") or "active").lower()
             hostname = description.get("Hostname") or getattr(node, "hostname", None) or node_id
             node_labels = spec.get("Labels") or {}
+            pool_label = str(node_labels.get("name") or "").strip()
+            if worker_pool_labels and pool_label and pool_label not in worker_pool_labels:
+                continue
             node_label_text = ", ".join(
                 f"{key}={value}" for key, value in sorted(node_labels.items())
             )

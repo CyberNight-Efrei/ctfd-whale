@@ -175,7 +175,13 @@ Do not deploy FRPC in `global` mode with the current router. A global FRPC servi
 
 The example stack file is [`docker-stack.frp.example.yml`](../docker-stack.frp.example.yml). Review its image versions, token, public hostname, port range and network name before deploying.
 
-1. Ensure the challenge overlay network configured in `whale:docker_auto_connect_network` exists and is attachable. The example defaults to `ctfd_frp-containers`.
+1. Ensure the challenge network configured in `whale:docker_auto_connect_network` is an attachable Swarm overlay. If it does not already exist, create it on the manager (the default name used below is `ctfd_frp-containers`):
+
+   ```bash
+   docker network create --driver overlay --attachable ctfd_frp-containers
+   ```
+
+   Check an existing network with `docker network inspect ctfd_frp-containers`: it must have driver `overlay`, scope `swarm` and `Attachable: true`. If you use another name, set both `whale:docker_auto_connect_network` and `CTFD_CONTAINERS_NETWORK` to that same name.
 2. On the Swarm manager (`ctfd`), export the required variables and deploy the stack:
 
    ```bash

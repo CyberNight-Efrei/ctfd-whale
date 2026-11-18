@@ -1,0 +1,44 @@
+.whale-workers-page { margin-bottom: 2rem; }
+.whale-workers-header { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem; padding-bottom:1.2rem; border-bottom:1px solid rgba(127,127,127,.25); }
+.whale-workers-header h2 { margin:0 0 .35rem; font-size:1.65rem; font-weight:600; }
+.whale-workers-header p { margin:0; color:var(--muted,#6c757d); }
+.whale-workers-summary { display:flex; align-items:center; gap:.9rem; flex-wrap:wrap; margin-top:.85rem; color:var(--muted,#6c757d); font-size:.9rem; }
+.whale-worker-summary-item { display:inline-flex; align-items:center; gap:.35rem; }
+.whale-worker-summary-item strong { color:inherit; font-variant-numeric:tabular-nums; }
+.whale-monitor-section { margin:1.5rem 0; }
+.whale-monitor-section-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; margin-bottom:.85rem; }
+.whale-monitor-section-heading h3 { margin:0 0 .25rem; font-size:1.2rem; font-weight:650; }
+.whale-monitor-section-heading p { margin:0; color:var(--muted,#6c757d); font-size:.9rem; }
+.whale-monitor-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:1rem; }
+.whale-monitor-grid-server { grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); }
+.whale-monitor-card { min-width:0; padding:1rem; border:1px solid rgba(127,127,127,.25); border-radius:.55rem; background:var(--card-bg,rgba(127,127,127,.025)); }
+.whale-monitor-card-heading { display:flex; align-items:flex-start; gap:.7rem; }
+.whale-monitor-card-icon { display:flex; align-items:center; justify-content:center; flex:0 0 2.5rem; width:2.5rem; height:2.5rem; border-radius:.45rem; background:rgba(127,127,127,.12); }
+.whale-monitor-card-title { min-width:0; flex:1; }
+.whale-monitor-card-title h4 { margin:0 0 .2rem; font-size:1rem; font-weight:650; overflow-wrap:anywhere; }
+.whale-monitor-card-title small { color:var(--muted,#6c757d); }
+.whale-monitor-state { display:inline-flex; flex:0 0 auto; align-items:center; gap:.4rem; padding:.25rem .5rem; border:1px solid rgba(127,127,127,.25); border-radius:2rem; font-size:.75rem; font-weight:650; white-space:nowrap; }
+.whale-status-dot { display:inline-block; width:.55rem; height:.55rem; border-radius:50%; background:#929aa3; box-shadow:0 0 0 2px rgba(127,127,127,.12); }
+.whale-status-dot-running,.whale-status-dot-online { background:#28a745; }
+.whale-status-dot-error,.whale-status-dot-offline,.whale-status-dot-missing { background:#dc3545; }
+.whale-status-dot-degraded,.whale-status-dot-starting,.whale-status-dot-paused { background:#e0a800; }
+.whale-status-dot-unknown,.whale-status-dot-unassigned,.whale-status-dot-stopped { background:#929aa3; }
+.whale-monitor-state-running,.whale-monitor-state-online { color:#218838; border-color:rgba(40,167,69,.35); background:rgba(40,167,69,.07); }
+.whale-monitor-state-error,.whale-monitor-state-offline,.whale-monitor-state-missing { color:#c82333; border-color:rgba(220,53,69,.35); background:rgba(220,53,69,.07); }
+.whale-monitor-state-degraded,.whale-monitor-state-starting,.whale-monitor-state-paused { color:#9a7600; border-color:rgba(224,168,0,.4); background:rgba(224,168,0,.08); }
+.whale-monitor-state-unknown,.whale-monitor-state-unassigned,.whale-monitor-state-stopped { color:var(--muted,#6c757d); }
+.whale-monitor-metrics { display:flex; flex-wrap:wrap; gap:.25rem .9rem; margin:.9rem 0 .6rem; color:var(--muted,#6c757d); font-size:.85rem; }
+.whale-monitor-metrics strong { color:inherit; font-variant-numeric:tabular-nums; }
+.whale-monitor-details { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.55rem .8rem; margin:1rem 0 .6rem; }
+.whale-monitor-details div { min-width:0; }
+.whale-monitor-details dt { color:var(--muted,#6c757d); font-size:.75rem; font-weight:500; }
+.whale-monitor-details dd { margin:0; font-size:.88rem; font-weight:600; overflow-wrap:anywhere; }
+.whale-monitor-image,.whale-monitor-node-id { margin:.6rem 0 0; color:var(--muted,#6c757d); font-size:.78rem; overflow-wrap:anywhere; }
+.whale-monitor-error { margin:.65rem 0 0; padding:.5rem; border-left:3px solid #dc3545; background:rgba(220,53,69,.06); font-size:.8rem; overflow-wrap:anywhere; }
+.whale-monitor-card-actions { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.9rem; }
+.whale-monitor-empty { padding:1.25rem; border:1px dashed rgba(127,127,127,.35); border-radius:.5rem; color:var(--muted,#6c757d); text-align:center; }
+.whale-monitor-footnote { margin-top:1.4rem; color:var(--muted,#6c757d); font-size:.82rem; }
+.whale-frp-logs-toolbar { display:flex; align-items:center; gap:.6rem; margin-bottom:.75rem; }
+#whale-frp-logs-tail { width:auto; }
+.whale-frp-log-output { min-height:180px; max-height:60vh; overflow:auto; padding:1rem; border-radius:.35rem; background:#15191e; color:#e3e7eb; font: .8rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+@media (max-width:767.98px) { .whale-workers-header h2 {font-size:1.4rem;} .whale-monitor-grid,.whale-monitor-grid-server {grid-template-columns:1fr;} .whale-monitor-section-heading {display:block;} }

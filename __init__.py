@@ -21,6 +21,7 @@ from .utils.checks import WhaleChecks
 from .utils.control import ControlUtil
 from .utils.db import DBContainer
 from .utils.docker import DockerUtils
+from .utils.cluster import DockerClusterMonitor
 from .utils.exceptions import WhaleWarning
 from .utils.setup import setup_default_configs
 from .utils.routers import Router
@@ -172,6 +173,12 @@ def load(app):
             instance_statuses=instance_statuses,
             status_counts=status_counts,
         )
+
+    @page_blueprint.route("/admin/workers")
+    @admins_only
+    def admin_list_workers():
+        snapshot = DockerClusterMonitor.snapshot()
+        return render_template("whale_workers.html", snapshot=snapshot)
 
     def auto_clean_container():
         with app.app_context():

@@ -12,6 +12,7 @@ from .models import WhaleContainer
 from .utils.control import ControlUtil
 from .utils.db import DBContainer
 from .utils.docker import DockerUtils
+from .utils.cluster import DockerClusterMonitor
 from .utils.routers import Router
 
 admin_namespace = Namespace("ctfd-whale-admin")
@@ -215,3 +216,43 @@ class UserContainers(Resource):
         if not result:
             abort(403, message, success=False)
         return {'success': True, 'message': message}
+
+
+@admin_namespace.route("/cluster/logs")
+class AdminClusterLogs(Resource):
+    @staticmethod
+    @admins_only
+    def get():
+        source = request.args.get("source", "")
+        source_id = request.args.get("id", "")
+        requested_tail = request.args.get("tail", 200, type=int)
+        tail = max(1, min(requested_tail or 200, 1000))
+
+        if source not in ("service", "container") or not source_id:
+            abort(400, "A valid Docker log source and ID are required.", success=False)
+
+        try:
+            logs = DockerClusterMonitor.get_logs(source, source_id, tail=tail)
+        except LookupError as exc:
+            abort(404, str(exc), success=False)
+        except ValueError as exc:
+            abort(400, str(exc), success=False)
+        except Exception:
+            current_app.logger.exception(
+                "Unable to retrieve FRPC/FRPS Docker logs (%s, %s)",
+                source, source_id,
+            )
+            abort(
+                502,
+                "Docker logs are currently unavailable. Check the CTFd server logs.",
+                success=False,
+            )
+
+        return {
+            "success": True,
+            "data": {
+                "source": source,
+                "tail": tail,
+                "logs": logs,
+            },
+        }

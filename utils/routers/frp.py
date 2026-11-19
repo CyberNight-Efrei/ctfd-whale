@@ -36,6 +36,15 @@ class FrpRouter(BaseRouter):
         self.ses = session()
         self.url = get_config("whale:frp_api_url", "").rstrip("/")
         self.common = ""
+
+        # FRPC's admin_addr/admin_port API uses HTTP Basic Auth whenever
+        # admin_user/admin_pwd are configured on the FRPC process. Apply the
+        # same credentials to every status/config/reload request, including
+        # the per-worker endpoints discovered for global FRPC services.
+        admin_user = str(get_config("whale:frp_admin_user", "") or "")
+        admin_pwd = str(get_config("whale:frp_admin_pwd", "") or "")
+        if admin_user or admin_pwd:
+            self.ses.auth = (admin_user, admin_pwd)
         try:
             CacheProvider(app=current_app).init_port_sets()
         except Exception:

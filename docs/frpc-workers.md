@@ -96,6 +96,10 @@ FRPC remains on the `challenges` overlay and publishes its admin API on TCP/7400
 
 The `challenges` network must already exist as a Swarm overlay and must be the same network used by Whale's challenge services. Workers must also have outbound connectivity and DNS resolution for `frps.cybnsrv.rezo` on TCP/7000.
 
+## FRPC admin API authentication
+
+When `--admin_user` and `--admin_pwd` are configured on FRPC, enter the same credentials in CTFd-Whale under **Settings → Routing → FRPC Admin Username / Password**. Leave both fields empty when FRPC admin authentication is disabled. Whale uses HTTP Basic Auth for status checks, config reads/writes, and reloads on each worker.
+
 ## Worker-aware routing
 
 For each routable Whale instance, the plugin resolves the Swarm task of its primary service (`<user_id>-<uuid>`) and reads its current `NodeID`. It sends the complete FRP rule set only to the FRPC agent on that node. The other agents receive configurations without those rules. When an instance is removed, the plugin refreshes each live agent so stale routes are removed.

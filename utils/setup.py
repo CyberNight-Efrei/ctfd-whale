@@ -16,6 +16,8 @@ def setup_default_configs():
         'docker_swarm_nodes': 'linux-1',
         'docker_timeout': '3600',
         'frp_api_url': 'http://frpc:7400',
+        'frp_admin_user': '',
+        'frp_admin_pwd': '',
         'frp_worker_hostname_prefix': 'worker',
         'frp_http_port': '8080',
         'frp_http_domain_suffix': 'challenges.cybernight-c.tf',

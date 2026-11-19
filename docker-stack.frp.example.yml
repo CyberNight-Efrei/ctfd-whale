@@ -46,8 +46,8 @@ services:
       - "--token=${FRP_TOKEN:?Set FRP_TOKEN before deploying}"
       - "--admin_addr=0.0.0.0"
       - "--admin_port=7400"
-      - "--admin_user="
-      - "--admin_pwd="
+      - "--admin_user=${FRPC_ADMIN_USER:-}"
+      - "--admin_pwd=${FRPC_ADMIN_PWD:-}"
     ports:
       # One listener on each worker; CTFd reaches it at <node.Status.Addr>:7400.
       - target: 7400

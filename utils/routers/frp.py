@@ -45,11 +45,11 @@ class FrpRouter(BaseRouter):
         # Explicit environment variables take precedence over the values
         # stored in CTFd's plugin settings. Presence is checked separately from
         # content so an empty environment value can intentionally disable auth.
-        admin_user = os.environ.get("CTFD_WHALE_FRP_ADMIN_USER")
+        admin_user = os.environ.get("FRPC_ADMIN_USER")
         if admin_user is None:
             admin_user = str(get_config("whale:frp_admin_user", "") or "")
 
-        admin_pwd = os.environ.get("CTFD_WHALE_FRP_ADMIN_PASSWORD")
+        admin_pwd = os.environ.get("FRPC_ADMIN_PWD")
         if admin_pwd is None:
             admin_pwd = str(get_config("whale:frp_admin_pwd", "") or "")
         if admin_user or admin_pwd:

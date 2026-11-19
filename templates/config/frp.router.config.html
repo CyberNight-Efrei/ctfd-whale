@@ -21,8 +21,8 @@
     </div>
 {% endfor %}
 <p class="form-text text-muted">
-    Environment variables CTFD_WHALE_FRP_ADMIN_USER and
-    CTFD_WHALE_FRP_ADMIN_PASSWORD override the values entered here.
+    Environment variables FRPC_ADMIN_USER and
+    FRPC_ADMIN_PWD override the values entered here.
     Leave both credentials empty when FRPC admin authentication is disabled.
 </p>
 {% set frpc_template = get_config("whale:frp_config_template", "") %}

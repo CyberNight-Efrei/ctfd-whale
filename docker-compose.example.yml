@@ -18,8 +18,8 @@ services:
       - ERROR_LOG=-
       - REVERSE_PROXY=true
       # Optional FRPC admin API HTTP Basic Auth; overrides Whale UI settings.
-      - CTFD_WHALE_FRP_ADMIN_USER=${CTFD_WHALE_FRP_ADMIN_USER:-}
-      - CTFD_WHALE_FRP_ADMIN_PASSWORD=${CTFD_WHALE_FRP_ADMIN_PASSWORD:-}
+      - FRPC_ADMIN_USER=${FRPC_ADMIN_USER:-}
+      - FRPC_ADMIN_PWD=${FRPC_ADMIN_PWD:-}
     volumes:
       - .data/CTFd/logs:/var/log/CTFd
       - .data/CTFd/uploads:/var/uploads
@@ -74,8 +74,8 @@ services:
       "--token=your_token",
       "--admin_addr=0.0.0.0",
       "--admin_port=7000",
-      "--admin_user=${CTFD_WHALE_FRP_ADMIN_USER:-}",
-      "--admin_pwd=${CTFD_WHALE_FRP_ADMIN_PASSWORD:-}",
+      "--admin_user=${FRPC_ADMIN_USER:-}",
+      "--admin_pwd=${FRPC_ADMIN_PWD:-}",
     ]
     networks:
       frp:

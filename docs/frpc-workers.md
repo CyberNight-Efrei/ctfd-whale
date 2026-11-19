@@ -104,8 +104,8 @@ When `--admin_user` and `--admin_pwd` are configured on FRPC, enter the same cre
 
 The CTFd plugin accepts two optional environment variables:
 
-- `CTFD_WHALE_FRP_ADMIN_USER`
-- `CTFD_WHALE_FRP_ADMIN_PASSWORD`
+- `FRPC_ADMIN_USER`
+- `FRPC_ADMIN_PWD`
 
 Add them to the **CTFd application service**, not only to the FRPC service. Example:
 
@@ -113,15 +113,15 @@ Add them to the **CTFd application service**, not only to the FRPC service. Exam
 services:
   ctfd:
     environment:
-      - CTFD_WHALE_FRP_ADMIN_USER=${CTFD_WHALE_FRP_ADMIN_USER:-}
-      - CTFD_WHALE_FRP_ADMIN_PASSWORD=${CTFD_WHALE_FRP_ADMIN_PASSWORD:-}
+      - FRPC_ADMIN_USER=${FRPC_ADMIN_USER:-}
+      - FRPC_ADMIN_PWD=${FRPC_ADMIN_PWD:-}
 ```
 
 Put the values in the Compose `.env` file beside the compose YAML:
 
 ```dotenv
-CTFD_WHALE_FRP_ADMIN_USER=your-admin-user
-CTFD_WHALE_FRP_ADMIN_PASSWORD='your-admin-password'
+FRPC_ADMIN_USER=your-admin-user
+FRPC_ADMIN_PWD='your-admin-password'
 ```
 
 Use the exact same username/password in the FRPC process arguments (`--admin_user` and `--admin_pwd`) on **every worker**. Compose substitutes `.env` variables when it renders the YAML; CTFd then reads the environment values when the FRP router starts.
@@ -131,7 +131,16 @@ Environment values take precedence over **Whale → Settings → Routing** value
 For a Compose deployment, update the service with:
 
 ```sh
-docker compose up -d --force-recreate ctfd
+docker compose up -d --force-recreate ctfd frpc
+```
+
+For `docker stack deploy`, export variables from your `.env` file before deploying (Stack deploy does not automatically load it):
+
+```sh
+set -a
+. ./.env
+set +a
+docker stack deploy --resolve-image never -c docker-stack.frp.example.yml frp
 ```
 
 Do not commit the real `.env` file or publish the FRPC admin password.

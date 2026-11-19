@@ -1,6 +1,14 @@
 """Read-only monitoring of Docker Swarm workers and FRP workloads."""
 
+import re
+
 from CTFd.utils import get_config
+
+
+_ANSI_ESCAPE = re.compile(
+    r"\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\)|[@-_])"
+)
+_TERMINAL_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 from .docker import DockerUtils, get_docker_client
 
@@ -44,18 +52,31 @@ class DockerClusterMonitor:
 
     @staticmethod
     def _decode_logs(output):
+        """Decode Docker log bytes as UTF-8 and remove terminal formatting."""
         if output is None:
             return ""
+
         if isinstance(output, bytes):
-            return output.decode("utf-8", errors="replace")
-        if isinstance(output, str):
-            return output
-        chunks = list(output)
-        return "".join(
-            item.decode("utf-8", errors="replace")
-            if isinstance(item, bytes) else str(item)
-            for item in chunks
-        )
+            text = output.decode("utf-8", errors="replace")
+        elif isinstance(output, str):
+            text = output
+        else:
+            chunks = list(output)
+            if all(isinstance(chunk, bytes) for chunk in chunks):
+                # Join before decoding so a multi-byte UTF-8 character split
+                # across Docker stream chunks is not replaced accidentally.
+                text = b"".join(chunks).decode("utf-8", errors="replace")
+            else:
+                text = "".join(
+                    chunk.decode("utf-8", errors="replace")
+                    if isinstance(chunk, bytes) else str(chunk)
+                    for chunk in chunks
+                )
+
+        # FRPC may emit ANSI color sequences even when Docker captures stdout.
+        # They are control characters, not text, and appear as garbage in <pre>.
+        text = _ANSI_ESCAPE.sub("", text)
+        return _TERMINAL_CONTROL.sub("", text)
 
     @classmethod
     def _service_summary(cls, service, tasks):
@@ -178,6 +199,32 @@ class DockerClusterMonitor:
                 tasks_by_service.setdefault(service_id, []).append(task)
             if node_id:
                 tasks_by_node.setdefault(node_id, []).append(task)
+
+        # A grouped Whale challenge can create several Swarm services. Count
+        # only its primary service (named exactly like its whale_id) so each
+        # instance is counted once, on the node actually running it.
+        instance_by_service = {}
+        for service in services:
+            attrs = getattr(service, "attrs", {}) or {}
+            spec = attrs.get("Spec", {}) or {}
+            labels = spec.get("Labels") or {}
+            whale_id = labels.get("whale_id")
+            service_name = spec.get("Name") or getattr(service, "name", None)
+            service_id = getattr(service, "id", None) or attrs.get("ID")
+            if whale_id and service_name == whale_id and service_id:
+                instance_by_service[service_id] = str(whale_id)
+
+        running_instances_by_node = {}
+        for task in tasks:
+            whale_id = instance_by_service.get(task.get("ServiceID"))
+            node_id = task.get("NodeID")
+            if (
+                whale_id
+                and node_id
+                and str(task.get("DesiredState", "")).lower() == "running"
+                and str((task.get("Status") or {}).get("State", "")).lower() == "running"
+            ):
+                running_instances_by_node.setdefault(node_id, set()).add(whale_id)
 
         frpc_services = []
         frps_entries = []
@@ -324,6 +371,7 @@ class DockerClusterMonitor:
                 }.get(overall, "État inconnu"),
                 "task_error": last_task_error[:300],
                 "frpc_task_count": len(node_tasks),
+                "running_instances": len(running_instances_by_node.get(node_id, set())),
             })
 
         workers.sort(key=lambda item: item["name"].lower())

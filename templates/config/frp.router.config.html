@@ -21,8 +21,9 @@
     </div>
 {% endfor %}
 <p class="form-text text-muted">
-    Leave both FRPC Admin fields empty when --admin_user and --admin_pwd are empty.
-    The same credentials are used for every FRPC worker agent.
+    Environment variables CTFD_WHALE_FRP_ADMIN_USER and
+    CTFD_WHALE_FRP_ADMIN_PASSWORD override the values entered here.
+    Leave both credentials empty when FRPC admin authentication is disabled.
 </p>
 {% set frpc_template = get_config("whale:frp_config_template", "") %}
 <div class="form-group">

@@ -1,4 +1,5 @@
 import html
+import os
 import re
 import warnings
 
@@ -41,8 +42,16 @@ class FrpRouter(BaseRouter):
         # admin_user/admin_pwd are configured on the FRPC process. Apply the
         # same credentials to every status/config/reload request, including
         # the per-worker endpoints discovered for global FRPC services.
-        admin_user = str(get_config("whale:frp_admin_user", "") or "")
-        admin_pwd = str(get_config("whale:frp_admin_pwd", "") or "")
+        # Explicit environment variables take precedence over the values
+        # stored in CTFd's plugin settings. Presence is checked separately from
+        # content so an empty environment value can intentionally disable auth.
+        admin_user = os.environ.get("CTFD_WHALE_FRP_ADMIN_USER")
+        if admin_user is None:
+            admin_user = str(get_config("whale:frp_admin_user", "") or "")
+
+        admin_pwd = os.environ.get("CTFD_WHALE_FRP_ADMIN_PASSWORD")
+        if admin_pwd is None:
+            admin_pwd = str(get_config("whale:frp_admin_pwd", "") or "")
         if admin_user or admin_pwd:
             self.ses.auth = (admin_user, admin_pwd)
         try:

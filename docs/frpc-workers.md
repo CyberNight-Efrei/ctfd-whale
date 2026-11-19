@@ -100,6 +100,42 @@ The `challenges` network must already exist as a Swarm overlay and must be the s
 
 When `--admin_user` and `--admin_pwd` are configured on FRPC, enter the same credentials in CTFd-Whale under **Settings → Routing → FRPC Admin Username / Password**. Leave both fields empty when FRPC admin authentication is disabled. Whale uses HTTP Basic Auth for status checks, config reads/writes, and reloads on each worker.
 
+## Configure FRPC admin credentials through CTFd Docker Compose
+
+The CTFd plugin accepts two optional environment variables:
+
+- `CTFD_WHALE_FRP_ADMIN_USER`
+- `CTFD_WHALE_FRP_ADMIN_PASSWORD`
+
+Add them to the **CTFd application service**, not only to the FRPC service. Example:
+
+```yaml
+services:
+  ctfd:
+    environment:
+      - CTFD_WHALE_FRP_ADMIN_USER=${CTFD_WHALE_FRP_ADMIN_USER:-}
+      - CTFD_WHALE_FRP_ADMIN_PASSWORD=${CTFD_WHALE_FRP_ADMIN_PASSWORD:-}
+```
+
+Put the values in the Compose `.env` file beside the compose YAML:
+
+```dotenv
+CTFD_WHALE_FRP_ADMIN_USER=your-admin-user
+CTFD_WHALE_FRP_ADMIN_PASSWORD='your-admin-password'
+```
+
+Use the exact same username/password in the FRPC process arguments (`--admin_user` and `--admin_pwd`) on **every worker**. Compose substitutes `.env` variables when it renders the YAML; CTFd then reads the environment values when the FRP router starts.
+
+Environment values take precedence over **Whale → Settings → Routing** values in the database. If a variable is absent, the plugin falls back to the corresponding UI setting. If it is explicitly set to an empty string, the plugin treats that as an intentional empty value. Restart/recreate the CTFd service after changing the variables so its processes receive the new environment.
+
+For a Compose deployment, update the service with:
+
+```sh
+docker compose up -d --force-recreate ctfd
+```
+
+Do not commit the real `.env` file or publish the FRPC admin password.
+
 ## Worker-aware routing
 
 For each routable Whale instance, the plugin resolves the Swarm task of its primary service (`<user_id>-<uuid>`) and reads its current `NodeID`. It sends the complete FRP rule set only to the FRPC agent on that node. The other agents receive configurations without those rules. When an instance is removed, the plugin refreshes each live agent so stale routes are removed.

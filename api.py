@@ -12,10 +12,38 @@ from .models import WhaleContainer
 from .utils.control import ControlUtil
 from .utils.db import DBContainer
 from .utils.docker import DockerUtils
+from .utils.cluster import DockerClusterMonitor
 from .utils.routers import Router
 
 admin_namespace = Namespace("ctfd-whale-admin")
 user_namespace = Namespace("ctfd-whale-user")
+
+
+def _serialize_admin_container(container):
+    """Build a JSON-safe, non-secret summary for the admin container API."""
+    return {
+        "id": container.id,
+        "user_id": container.user_id,
+        "challenge_id": container.challenge_id,
+        "start_time": container.start_time.isoformat() if container.start_time else None,
+        "renew_count": container.renew_count,
+        "status": container.status,
+        "lifecycle_state": container.lifecycle_state,
+        "uuid": container.uuid,
+        "node": container.node,
+        "port": container.port,
+        "port_mappings": [
+            {
+                "id": mapping.id,
+                "name": mapping.name,
+                "protocol": mapping.protocol,
+                "internal_port": mapping.internal_port,
+                "public_port": mapping.public_port,
+                "position": mapping.position,
+            }
+            for mapping in container.port_mappings
+        ],
+    }
 
 
 @admin_namespace.errorhandler
@@ -32,14 +60,18 @@ class AdminContainers(Resource):
     @staticmethod
     @admins_only
     def get():
-        page = abs(request.args.get("page", 1, type=int))
-        results_per_page = abs(request.args.get("per_page", 20, type=int))
+        page = max(1, abs(request.args.get("page", 1, type=int)))
+        results_per_page = max(1, abs(request.args.get("per_page", 20, type=int)))
         page_start = results_per_page * (page - 1)
         page_end = results_per_page * (page - 1) + results_per_page
 
         count = DBContainer.get_all_alive_container_count()
-        containers = DBContainer.get_all_alive_container_page(
-            page_start, page_end)
+        containers = [
+            _serialize_admin_container(container)
+            for container in DBContainer.get_all_alive_container_page(
+                page_start, page_end
+            )
+        ]
 
         return {'success': True, 'data': {
             'containers': containers,
@@ -215,3 +247,43 @@ class UserContainers(Resource):
         if not result:
             abort(403, message, success=False)
         return {'success': True, 'message': message}
+
+
+@admin_namespace.route("/cluster/logs")
+class AdminClusterLogs(Resource):
+    @staticmethod
+    @admins_only
+    def get():
+        source = request.args.get("source", "")
+        source_id = request.args.get("id", "")
+        requested_tail = request.args.get("tail", 200, type=int)
+        tail = max(1, min(requested_tail or 200, 1000))
+
+        if source not in ("service", "container") or not source_id:
+            abort(400, "A valid Docker log source and ID are required.", success=False)
+
+        try:
+            logs = DockerClusterMonitor.get_logs(source, source_id, tail=tail)
+        except LookupError as exc:
+            abort(404, str(exc), success=False)
+        except ValueError as exc:
+            abort(400, str(exc), success=False)
+        except Exception:
+            current_app.logger.exception(
+                "Unable to retrieve FRPC/FRPS Docker logs (%s, %s)",
+                source, source_id,
+            )
+            abort(
+                502,
+                "Docker logs are currently unavailable. Check the CTFd server logs.",
+                success=False,
+            )
+
+        return {
+            "success": True,
+            "data": {
+                "source": source,
+                "tail": tail,
+                "logs": logs,
+            },
+        }

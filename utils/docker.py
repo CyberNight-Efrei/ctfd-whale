@@ -1,6 +1,8 @@
+import ipaddress
 import json
 import logging
 import random
+import re
 import uuid
 from collections import OrderedDict
 
@@ -59,6 +61,29 @@ class DockerUtils:
                 raise WhaleError('docker.io failed to login, check your credentials')
 
     @staticmethod
+    def get_dns_servers():
+        """Parse the DNS setting as a list of valid IPv4/IPv6 nameservers.
+
+        Commas, semicolons, spaces and newlines are accepted as separators.
+        """
+        configured = get_config("whale:docker_dns", "") or ""
+        candidates = re.split(r"[,;\s]+", str(configured).strip())
+        servers = []
+        for candidate in candidates:
+            if not candidate:
+                continue
+            try:
+                server = str(ipaddress.ip_address(candidate))
+            except ValueError as exc:
+                raise WhaleError(
+                    f"Invalid DNS server address '{candidate}'. "
+                    "Use valid IPv4/IPv6 addresses separated by commas or spaces."
+                ) from exc
+            if server not in servers:
+                servers.append(server)
+        return servers
+
+    @staticmethod
     def add_container(container):
         try:
             if container.challenge.docker_image.lstrip().startswith("{"):
@@ -82,7 +107,7 @@ class DockerUtils:
 
     @staticmethod
     def _create_standalone_container(client, container):
-        dns = get_config("whale:docker_dns", "").split(",")
+        dns = DockerUtils.get_dns_servers()
         node = DockerUtils.choose_node(
             container.challenge.docker_image,
             get_config("whale:docker_swarm_nodes", "").split(",")
@@ -147,7 +172,7 @@ class DockerUtils:
                 scope="swarm",
             )
 
-            dns = []
+            dns = DockerUtils.get_dns_servers()
             containers = get_config("whale:docker_auto_connect_containers", "").split(",")
             for external_container in containers:
                 if not external_container:
@@ -159,7 +184,9 @@ class DockerUtils:
                         if details.get("Name") == external_container:
                             address = details.get("IPv4Address", "")
                             if address:
-                                dns.append(address.split("/")[0])
+                                dns_address = address.split("/")[0]
+                                if dns_address not in dns:
+                                    dns.append(dns_address)
 
             has_processed_main = False
             for name, image in images.items():

@@ -227,15 +227,12 @@ class DockerClusterMonitor:
         frpc_entries = frpc_services + local_frpc
 
         workers = []
-        # The plugin schedules challenge instances only on nodes whose
-        # node.labels.name value is listed in whale:docker_swarm_nodes.
-        # Use that same pool for this view so dedicated FRPS nodes are not
-        # mistaken for challenge workers.
-        worker_pool_labels = {
-            item.strip()
-            for item in str(get_config("whale:docker_swarm_nodes", "") or "").split(",")
-            if item.strip()
-        }
+        # Worker names are an explicit infrastructure convention in this
+        # deployment. Swarm placement constraints cannot use hostname globs,
+        # so the same prefix is used by the FRPC label synchronizer.
+        worker_hostname_prefix = str(
+            get_config("whale:frp_worker_hostname_prefix", "worker") or "worker"
+        ).lower()
         frpc_service_ids = {
             item["id"] for item in frpc_services if item.get("id")
         }
@@ -254,10 +251,9 @@ class DockerClusterMonitor:
             state = str(node_status.get("State") or "unknown").lower()
             availability = str(spec.get("Availability") or "active").lower()
             hostname = description.get("Hostname") or getattr(node, "hostname", None) or node_id
-            node_labels = spec.get("Labels") or {}
-            pool_label = str(node_labels.get("name") or "").strip()
-            if worker_pool_labels and pool_label not in worker_pool_labels:
+            if not str(hostname).lower().startswith(worker_hostname_prefix):
                 continue
+            node_labels = spec.get("Labels") or {}
             node_label_text = ", ".join(
                 f"{key}={value}" for key, value in sorted(node_labels.items())
             )
@@ -356,6 +352,190 @@ class DockerClusterMonitor:
                 "frps": frps_state,
             },
         }
+
+    @staticmethod
+    def _node_identity(node):
+        attrs = getattr(node, "attrs", {}) or {}
+        description = attrs.get("Description", {}) or {}
+        status = attrs.get("Status", {}) or {}
+        spec = attrs.get("Spec", {}) or {}
+        hostname = description.get("Hostname") or getattr(node, "hostname", None)
+        node_id = getattr(node, "id", None) or attrs.get("ID")
+        return node_id, str(hostname or node_id or "unknown"), str(status.get("Addr") or ""), spec
+
+    @staticmethod
+    def _published_admin_port(service, target_port):
+        attrs = getattr(service, "attrs", {}) or {}
+        spec = attrs.get("Spec", {}) or {}
+        endpoint = spec.get("EndpointSpec", {}) or {}
+        for published in endpoint.get("Ports", []) or []:
+            try:
+                target = int(published.get("TargetPort") or 0)
+            except (TypeError, ValueError):
+                continue
+            if target != int(target_port):
+                continue
+            publish_mode = str(published.get("PublishMode") or "ingress").lower()
+            if publish_mode != "host":
+                raise ValueError(
+                    "The global FRPC admin port must be published with mode=host "
+                    "so CTFd reaches the agent on the matching worker."
+                )
+            port = published.get("PublishedPort")
+            if port:
+                return int(port)
+        raise ValueError(
+            "The global FRPC service must publish its admin port on the worker "
+            f"(target port {target_port}, publish mode host)."
+        )
+
+    @classmethod
+    def get_global_frpc_worker_targets(cls, admin_port=7400):
+        """Return worker -> FRPC admin URLs when a global FRPC service exists.
+
+        None means the deployment still uses the legacy single FRPC endpoint.
+        An empty mapping means a global service exists but no worker agent is
+        currently running.
+        """
+        client = getattr(DockerUtils, "client", None) or get_docker_client()
+        nodes = client.nodes.list()
+        node_by_id = {}
+        prefix = str(
+            get_config("whale:frp_worker_hostname_prefix", "worker") or "worker"
+        ).lower()
+        for node in nodes:
+            node_id, hostname, address, spec = cls._node_identity(node)
+            if not node_id or not hostname.lower().startswith(prefix):
+                continue
+            if str(spec.get("Role", "worker")).lower() != "worker":
+                continue
+            node_by_id[node_id] = {
+                "node_id": node_id,
+                "hostname": hostname,
+                "address": address,
+            }
+
+        global_services = []
+        for service in client.services.list():
+            if cls._service_kind(service) != "frpc":
+                continue
+            attrs = getattr(service, "attrs", {}) or {}
+            spec = attrs.get("Spec", {}) or {}
+            mode = spec.get("Mode", {}) or {}
+            if "Global" in mode:
+                service_id = getattr(service, "id", None) or attrs.get("ID")
+                if service_id:
+                    published_port = cls._published_admin_port(service, admin_port)
+                    global_services.append((service_id, published_port, spec.get("Name") or "FRPC"))
+
+        if not global_services:
+            return None
+
+        service_ports = {
+            service_id: (published_port, service_name)
+            for service_id, published_port, service_name in global_services
+        }
+        tasks = client.api.tasks(
+            filters={"service": list(service_ports.keys())}
+        )
+        targets = {}
+        for task in tasks:
+            service_id = task.get("ServiceID")
+            node_id = task.get("NodeID")
+            if service_id not in service_ports or node_id not in node_by_id:
+                continue
+            if str(task.get("DesiredState", "")).lower() != "running":
+                continue
+            if str((task.get("Status") or {}).get("State", "")).lower() != "running":
+                continue
+            node = node_by_id[node_id]
+            address = node["address"]
+            if not address:
+                continue
+            host = f"[{address}]" if ":" in address else address
+            published_port, service_name = service_ports[service_id]
+            targets[node_id] = {
+                **node,
+                "service_id": service_id,
+                "service_name": str(service_name),
+                "url": f"http://{host}:{published_port}",
+            }
+        return targets
+
+    @classmethod
+    def get_instance_node_assignments(cls, containers):
+        """Resolve each Whale instance to the node running its primary service.
+
+        The persisted node value is a placement label (not a hostname), so live
+        Swarm task placement is preferred and the label is only a fallback while
+        a task is being created or restarted.
+        """
+        if not containers:
+            return {}
+
+        client = getattr(DockerUtils, "client", None) or get_docker_client()
+        node_ids_by_label = {}
+        for node in client.nodes.list():
+            node_id, _hostname, _address, spec = cls._node_identity(node)
+            label = str((spec.get("Labels") or {}).get("name") or "").strip()
+            if node_id and label:
+                node_ids_by_label[label] = node_id
+
+        whale_ids = {
+            f"{container.user_id}-{container.uuid}": container
+            for container in containers
+        }
+        primary_services = {}
+        for service in client.services.list():
+            attrs = getattr(service, "attrs", {}) or {}
+            spec = attrs.get("Spec", {}) or {}
+            labels = spec.get("Labels") or {}
+            whale_id = labels.get("whale_id")
+            service_name = spec.get("Name") or getattr(service, "name", None)
+            service_id = getattr(service, "id", None) or attrs.get("ID")
+            # For grouped challenges, only the primary service is constrained
+            # to the selected challenge worker and owns the player-facing ports.
+            if whale_id in whale_ids and service_name == whale_id and service_id:
+                primary_services[service_id] = whale_id
+
+        task_candidates = {}
+        if primary_services:
+            tasks = client.api.tasks(
+                filters={"service": list(primary_services.keys())}
+            )
+            for task in tasks:
+                whale_id = primary_services.get(task.get("ServiceID"))
+                node_id = task.get("NodeID")
+                if not whale_id or not node_id:
+                    continue
+                if str(task.get("DesiredState", "")).lower() != "running":
+                    continue
+                state = str((task.get("Status") or {}).get("State", "")).lower()
+                if state == "running":
+                    priority = 2
+                elif state in cls.TRANSITIONAL:
+                    priority = 1
+                else:
+                    continue
+                updated = str(
+                    task.get("UpdatedAt")
+                    or task.get("CreatedAt")
+                    or ""
+                )
+                candidate = (priority, updated, node_id)
+                if whale_id not in task_candidates or candidate > task_candidates[whale_id]:
+                    task_candidates[whale_id] = candidate
+
+        assignments = {}
+        for whale_id, container in whale_ids.items():
+            candidate = task_candidates.get(whale_id)
+            if candidate:
+                assignments[whale_id] = candidate[2]
+            else:
+                label = str(getattr(container, "node", "") or "").strip()
+                if label in node_ids_by_label:
+                    assignments[whale_id] = node_ids_by_label[label]
+        return assignments
 
     @classmethod
     def get_logs(cls, source, source_id, tail=200):

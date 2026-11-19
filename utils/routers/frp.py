@@ -4,12 +4,14 @@ import warnings
 
 from flask import current_app
 from requests import session, RequestException
+from urllib.parse import urlsplit
 
 from CTFd.models import db
 from CTFd.utils import get_config, set_config, logging
 
 from .base import BaseRouter
 from ..cache import CacheProvider
+from ..cluster import DockerClusterMonitor
 from ..db import DBContainer
 from ..exceptions import WhaleError, WhaleWarning
 from ...models import WhaleContainer
@@ -75,6 +77,47 @@ class FrpRouter(BaseRouter):
             rules.append(self.FrpRule(rule_name, config))
         return rules
 
+    def _admin_port(self):
+        try:
+            return urlsplit(self.url).port or 7400
+        except ValueError:
+            return 7400
+
+    def _load_common_config(self, endpoint):
+        if self.common:
+            return self.common
+
+        configured = get_config("whale:frp_config_template", "") or ""
+        if "[common]" in configured:
+            self.common = configured
+            return self.common
+
+        remote = self.ses.get(f"{endpoint.rstrip('/')}/api/config", timeout=5)
+        if remote.status_code != 200:
+            raise RequestException(
+                f"FRP config endpoint returned HTTP {remote.status_code}"
+            )
+        self.common = remote.text
+        set_config("whale:frp_config_template", self.common)
+        return self.common
+
+    def _apply_config(self, endpoint, rules, common=None):
+        common = common if common is not None else self._load_common_config(endpoint)
+        config = common + "\n" + "\n".join(str(rule) for rule in rules)
+        base_url = endpoint.rstrip("/")
+        update_response = self.ses.put(
+            f"{base_url}/api/config", config, timeout=5
+        )
+        if update_response.status_code != 200:
+            raise RequestException(
+                f"FRP config update returned HTTP {update_response.status_code}"
+            )
+        reload_response = self.ses.get(f"{base_url}/api/reload", timeout=5)
+        if reload_response.status_code != 200:
+            raise RequestException(
+                f"FRP reload returned HTTP {reload_response.status_code}"
+            )
+
     def reload(self, exclude=None):
         route_lock = CacheProvider(app=current_app)
         if not route_lock.acquire_router_reload_lock():
@@ -83,47 +126,88 @@ class FrpRouter(BaseRouter):
             )
 
         try:
-            # FRP's API replaces the entire configuration. Build the snapshot only
-            # after taking the cross-worker lock, and omit stopping/cleanup-pending
-            # instances so a concurrent reload cannot reintroduce their routes.
-            rules = []
-            for container in DBContainer.get_routable_containers(include_starting=True):
-                if container.uuid == exclude:
-                    continue
-                rules.extend(self._rules_for_container(container))
+            # Build one authoritative snapshot while holding the shared lock.
+            # A global FRPC service gets only the routes for the worker hosting
+            # each challenge's primary Swarm service. Legacy single-agent
+            # deployments keep using whale:frp_api_url unchanged.
+            containers = [
+                container
+                for container in DBContainer.get_routable_containers(include_starting=True)
+                if container.uuid != exclude
+            ]
+            container_rules = []
+            for container in containers:
+                rules = self._rules_for_container(container)
+                if rules:
+                    container_rules.append((container, rules))
 
             try:
-                if not self.common:
-                    common = get_config("whale:frp_config_template", "")
-                    if "[common]" in common:
-                        self.common = common
-                    else:
-                        remote = self.ses.get(f"{self.url}/api/config", timeout=5)
-                        if remote.status_code != 200:
-                            raise RequestException(
-                                f"FRP config endpoint returned HTTP {remote.status_code}"
-                            )
-                        set_config("whale:frp_config_template", remote.text)
-                        self.common = remote.text
-                config = self.common + "\n" + "\n".join(str(rule) for rule in rules)
-                update_response = self.ses.put(
-                    f"{self.url}/api/config", config, timeout=5
+                worker_targets = DockerClusterMonitor.get_global_frpc_worker_targets(
+                    admin_port=self._admin_port()
                 )
-                if update_response.status_code != 200:
-                    raise RequestException(
-                        f"FRP config update returned HTTP {update_response.status_code}"
+                if worker_targets is None:
+                    # Backward-compatible path for the existing single FRPC.
+                    all_rules = [
+                        rule
+                        for _container, rules in container_rules
+                        for rule in rules
+                    ]
+                    self._apply_config(self.url, all_rules)
+                    return
+
+                if not worker_targets:
+                    if container_rules:
+                        raise WhaleError(
+                            "Aucun agent FRPC global n'est actif sur les workers. "
+                            "Vérifie le service FRPC global et le label ctfd_whale_frpc."
+                        )
+                    return
+
+                assignments = DockerClusterMonitor.get_instance_node_assignments(
+                    [container for container, _rules in container_rules]
+                )
+                rules_by_node = {
+                    node_id: [] for node_id in worker_targets
+                }
+                for container, rules in container_rules:
+                    whale_id = f"{container.user_id}-{container.uuid}"
+                    node_id = assignments.get(whale_id)
+                    if not node_id:
+                        raise WhaleError(
+                            f"Impossible de déterminer le worker Swarm de l'instance {whale_id}."
+                        )
+                    target = worker_targets.get(node_id)
+                    if not target:
+                        raise WhaleError(
+                            "Aucun agent FRPC actif sur le worker qui héberge "
+                            f"l'instance {whale_id}. Vérifie le hostname worker* "
+                            "et le déploiement global de FRPC."
+                        )
+                    rules_by_node[node_id].extend(rules)
+
+                # FRPC's config API replaces the entire file. Push a complete,
+                # isolated configuration to every live worker agent, including
+                # empty rule sets so removed challenges cannot leave stale routes.
+                first_target = next(iter(worker_targets.values()))
+                common = self._load_common_config(first_target["url"])
+                for node_id in sorted(worker_targets):
+                    self._apply_config(
+                        worker_targets[node_id]["url"],
+                        rules_by_node[node_id],
+                        common=common,
                     )
-                reload_response = self.ses.get(f"{self.url}/api/reload", timeout=5)
-                if reload_response.status_code != 200:
-                    raise RequestException(
-                        f"FRP reload returned HTTP {reload_response.status_code}"
-                    )
+            except WhaleError:
+                raise
             except RequestException as exc:
                 raise WhaleError(
                     "\nfrpc request failed\n"
                     + (f"{exc}\n" if str(exc) else "")
-                    + "please check the frp related configs"
+                    + "please check the frp related configs and worker reachability"
                 ) from None
+            except Exception as exc:
+                raise WhaleError(
+                    "Unable to synchronize FRPC worker routes: " + str(exc)
+                ) from exc
         finally:
             try:
                 route_lock.release_router_reload_lock()
@@ -359,11 +443,29 @@ class FrpRouter(BaseRouter):
 
     def check_availability(self):
         try:
-            response = self.ses.get(f"{self.url}/api/status", timeout=2.0)
+            worker_targets = DockerClusterMonitor.get_global_frpc_worker_targets(
+                admin_port=self._admin_port()
+            )
+            endpoints = (
+                [(target["hostname"], target["url"]) for target in worker_targets.values()]
+                if worker_targets is not None
+                else [("FRPC", self.url)]
+            )
+            if not endpoints:
+                return False, "No running global FRPC agent was found on hostname worker*."
+
+            for name, endpoint in endpoints:
+                response = self.ses.get(
+                    f"{endpoint.rstrip('/')}/api/status", timeout=2.0
+                )
+                if response.status_code == 401:
+                    return False, f"FRPC admin API unauthorized on {name}"
+                if not 200 <= response.status_code < 300:
+                    return False, (
+                        f"FRPC admin API on {name} returned HTTP {response.status_code}"
+                    )
+            return True, "Available"
         except RequestException:
-            return False, "Unable to access frpc admin api"
-        if response.status_code == 401:
-            return False, "frpc admin api unauthorized"
-        if not 200 <= response.status_code < 300:
-            return False, f"frpc admin api returned HTTP {response.status_code}"
-        return True, "Available"
+            return False, "Unable to access FRPC admin API on the configured endpoint(s)."
+        except Exception as exc:
+            return False, "Unable to discover worker FRPC agents: " + str(exc)

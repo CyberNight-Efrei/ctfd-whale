@@ -76,7 +76,7 @@
                 <div class="whale-monitor-section-heading">
                     <div>
                         <h3 id="whale-workers-title"><i class="fas fa-sitemap mr-2" aria-hidden="true"></i>Workers Swarm</h3>
-                        <p>La connexion d’un worker est déterminée par l’état Swarm (<code>Ready</code> et <code>Active</code>). L’état FRPC est affiché séparément : le plugin peut utiliser un agent FRPC centralisé sur un seul nœud.</p>
+                        <p>Les nœuds affichés sont les workers dont le hostname commence par <code>worker</code>. La connexion Swarm et l’état de l’agent FRPC sont suivis séparément.</p>
                     </div>
                 </div>
                 {% if snapshot.workers %}
@@ -174,7 +174,7 @@
 
             <p class="whale-monitor-footnote">
                 <i class="fas fa-info-circle mr-1" aria-hidden="true"></i>
-                La pastille du worker indique uniquement son état de connexion au Swarm. La santé de FRPC et FRPS est évaluée séparément. Avec la configuration actuelle du plugin, un agent FRPC Swarm unique peut joindre les services de challenge sur le réseau overlay partagé. Les logs d’un service Swarm sont agrégés par Docker ; les conteneurs autonomes sont consultés uniquement sur le daemon du manager.
+                La pastille du worker indique uniquement son état de connexion au Swarm. La santé de FRPC et FRPS est évaluée séparément. En mode FRPC global, chaque agent reçoit uniquement les routes des challenges hébergés sur son worker ; le mode historique avec un seul agent reste compatible. Les logs d’un service Swarm sont agrégés par Docker ; les conteneurs autonomes sont consultés uniquement sur le daemon du manager.
             </p>
         {% endif %}
     </section>

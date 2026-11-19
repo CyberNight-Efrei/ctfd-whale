@@ -1,39 +1,33 @@
 version: "3.8"
 
-# Deploy this file from the Swarm manager.
-# FRPS is pinned to the node whose hostname is "frps".
-# FRPC runs in global mode on workers labelled by scripts/label-frpc-workers.sh.
-# CTFd-Whale routes each challenge only through the FRPC on its hosting worker.
+# Minimal deployment matching the current VM networking:
+# - FRPS uses the host network on the VM named "frps".
+# - FRPC uses the existing "challenges" overlay to reach challenge services.
+#   Its outbound connection to FRPS uses the VM network via docker_gwbridge.
+# - One FRPC task is deployed on every worker labelled by the helper script.
 #
-# Run the label script on the Swarm manager before deploying, then build/push
-# your custom FRPS Dockerfile and deploy with:
-#   export FRPS_IMAGE='registry.example.org/frps:your-version'
-#   export FRP_TOKEN='replace-with-a-long-random-token'
-#   export FRP_SUBDOMAIN_HOST='challenges.cybn.fr'
-#   export CTFD_CONTAINERS_NETWORK='challenges'
-#   docker stack deploy -c docker-stack.frp.example.yml whale-frp
+# This file is for a clean deployment. If frpc/frps already exist, keep FRPS
+# and recreate only FRPC as documented in docs/frpc-workers.md.
+#
+# Required environment:
+#   FRP_TOKEN=...
+#   FRPS_ADDRESS=frps.cybnsrv.rezo
+#
+# Deploy from the Swarm manager:
+#   ./scripts/label-frpc-workers.sh
+#   docker stack deploy --resolve-image never -c docker-stack.frp.example.yml frp
 
 services:
   frps:
-    # docker stack deploy ignores "build"; this must be a pullable image.
-    image: ${FRPS_IMAGE:?Build and push the custom FRPS image, then set FRPS_IMAGE}
+    image: ${FRPS_IMAGE:-frps-frps:latest}
     command:
       - "--bind_addr=0.0.0.0"
-      - "--bind_port=${FRP_SERVER_PORT:-7000}"
+      - "--bind_port=7000"
       - "--token=${FRP_TOKEN:?Set FRP_TOKEN before deploying}"
-      - "--subdomain_host=${FRP_SUBDOMAIN_HOST:?Set FRP_SUBDOMAIN_HOST before deploying}"
-      - "--vhost_http_port=${FRP_VHOST_HTTP_PORT:-8000}"
-    ports:
-      # Default Swarm ingress mode publishes these ports on every node.
-      # Point public DNS to the FRPS node and restrict inbound firewall rules.
-      - "${FRP_SERVER_PORT:-7000}:${FRP_SERVER_PORT:-7000}/tcp"
-      - "${FRP_VHOST_HTTP_PORT:-8000}:${FRP_VHOST_HTTP_PORT:-8000}/tcp"
-      # Keep aligned with whale:frp_direct_port_minimum / maximum.
-      - "${FRP_DIRECT_PORT_RANGE:-10000-10500}:${FRP_DIRECT_PORT_RANGE:-10000-10500}/tcp"
+      - "--subdomain_host=challenges.cybn.fr"
+      - "--vhost_http_port=8000"
     networks:
-      frp:
-        aliases:
-          - frps
+      - host
     deploy:
       replicas: 1
       placement:
@@ -47,25 +41,21 @@ services:
   frpc:
     image: ${FRPC_IMAGE:-frankli0324/frp:frpc}
     command:
-      - "--server_addr=frps"
-      - "--server_port=${FRP_SERVER_PORT:-7000}"
+      - "--server_addr=${FRPS_ADDRESS:-frps.cybnsrv.rezo}"
+      - "--server_port=7000"
       - "--token=${FRP_TOKEN:?Set FRP_TOKEN before deploying}"
       - "--admin_addr=0.0.0.0"
       - "--admin_port=7400"
-      # CTFd-Whale currently sends unauthenticated HTTP requests to this API.
       - "--admin_user="
       - "--admin_pwd="
     ports:
-      # One host-mode listener per worker. Restrict TCP/7400 to the CTFd manager IP.
+      # One listener on each worker; CTFd reaches it at <node.Status.Addr>:7400.
       - target: 7400
         published: "7400"
         protocol: tcp
         mode: host
     networks:
-      frp:
-        aliases:
-          - frpc
-      containers: {}
+      - challenges
     deploy:
       mode: global
       placement:
@@ -78,13 +68,12 @@ services:
         window: 60s
 
 networks:
-  # Private overlay used for FRPC <-> FRPS control/data traffic.
-  frp:
-    driver: overlay
-    attachable: true
-    internal: true
+  # Built-in Docker host network (already present on each Swarm node).
+  host:
+    external: true
+    name: host
 
-  # Reuse the existing external overlay shared with Whale challenge services.
-  containers:
+  # Existing overlay shared by FRPC and the Whale challenge services.
+  challenges:
     external: true
     name: ${CTFD_CONTAINERS_NETWORK:-challenges}

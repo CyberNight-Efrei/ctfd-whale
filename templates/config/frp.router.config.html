@@ -21,9 +21,11 @@
     </div>
 {% endfor %}
 <p class="form-text text-muted">
-    Environment variables FRPC_ADMIN_USER and
-    FRPC_ADMIN_PWD override the values entered here.
-    Leave both credentials empty when FRPC admin authentication is disabled.
+    On first startup, non-empty FRPC_ADMIN_USER and FRPC_ADMIN_PWD environment
+    variables are copied into these fields when the saved settings are empty.
+    These saved fields are then authoritative; environment variables do not
+    override changes made here. Leave both credentials empty when FRPC admin
+    authentication is disabled.
 </p>
 {% set frpc_template = get_config("whale:frp_config_template", "") %}
 <div class="form-group">

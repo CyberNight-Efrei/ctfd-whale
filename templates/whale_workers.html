@@ -104,6 +104,7 @@
                                         </dd>
                                     </div>
                                     <div><dt>Tâches FRPC</dt><dd>{{ worker.frpc_task_count }}</dd></div>
+                                    <div><dt>Instances en cours sur ce worker</dt><dd>{{ worker.running_instances }}</dd></div>
                                     <div class="whale-monitor-detail-wide">
                                         <dt>Labels Docker</dt>
                                         <dd><code>{{ worker.node_labels or "Aucun label" }}</code></dd>

@@ -36,6 +36,11 @@
                         <i class="fas fa-stop-circle mr-1" aria-hidden="true"></i><span>Stop selected</span>
                     </button>
                 </div>
+                <a class="btn btn-outline-secondary"
+                   href="{{ request.full_path if request.query_string else request.path }}"
+                   title="Refresh the instance list and Swarm statuses" aria-label="Refresh instances">
+                    <i class="fas fa-sync-alt mr-1" aria-hidden="true"></i><span>Refresh</span>
+                </a>
                 <div class="btn-group" role="group" aria-label="Change instance layout">
                     {% if session['view_mode'] == 'card' %}
                         <a class="btn btn-outline-secondary" href="{{ url_for('ctfd-whale.admin_list_containers', page=1, mode='list', q=search_term, node=node_filter, challenge_id=challenge_filter, protocol=protocol_filter, per_page=per_page) }}" aria-label="Switch to table view">

@@ -126,7 +126,7 @@ FRPC_ADMIN_PWD='your-admin-password'
 
 Use the exact same username/password in the FRPC process arguments (`--admin_user` and `--admin_pwd`) on **every worker**. Compose substitutes `.env` variables when it renders the YAML; CTFd then reads the environment values when the FRP router starts.
 
-Environment values take precedence over **Whale → Settings → Routing** values in the database. If a variable is absent, the plugin falls back to the corresponding UI setting. If it is explicitly set to an empty string, the plugin treats that as an intentional empty value. Restart/recreate the CTFd service after changing the variables so its processes receive the new environment.
+On the first plugin startup after this behavior is installed, each non-empty environment variable is copied into its corresponding Whale setting only when that saved setting is empty. This is a one-time initial fill: after that, **Whale → Settings → Routing** is the source of truth. You can view, edit, or clear both credentials directly in the settings form; changing the environment variables later does not override saved values.
 
 For a Compose deployment, update the service with:
 
@@ -144,6 +144,8 @@ docker stack deploy --resolve-image never -c docker-stack.frp.example.yml frp
 ```
 
 Do not commit the real `.env` file or publish the FRPC admin password.
+
+The **Instances** page has a **Refresh** action in its toolbar. It reloads the current page and Docker Swarm status while preserving the active filters, page number, and view mode.
 
 ## Worker-aware routing
 

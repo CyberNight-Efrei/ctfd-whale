@@ -1,5 +1,4 @@
 import html
-import os
 import re
 import warnings
 
@@ -38,20 +37,11 @@ class FrpRouter(BaseRouter):
         self.url = get_config("whale:frp_api_url", "").rstrip("/")
         self.common = ""
 
-        # FRPC's admin_addr/admin_port API uses HTTP Basic Auth whenever
-        # admin_user/admin_pwd are configured on the FRPC process. Apply the
-        # same credentials to every status/config/reload request, including
-        # the per-worker endpoints discovered for global FRPC services.
-        # Explicit environment variables take precedence over the values
-        # stored in CTFd's plugin settings. Presence is checked separately from
-        # content so an empty environment value can intentionally disable auth.
-        admin_user = os.environ.get("FRPC_ADMIN_USER")
-        if admin_user is None:
-            admin_user = str(get_config("whale:frp_admin_user", "") or "")
-
-        admin_pwd = os.environ.get("FRPC_ADMIN_PWD")
-        if admin_pwd is None:
-            admin_pwd = str(get_config("whale:frp_admin_pwd", "") or "")
+        # FRPC admin credentials are managed in Whale Settings. The plugin
+        # copies FRPC_ADMIN_USER/FRPC_ADMIN_PWD into empty settings once during
+        # startup; afterwards, the saved CTFd values are authoritative.
+        admin_user = str(get_config("whale:frp_admin_user", "") or "")
+        admin_pwd = str(get_config("whale:frp_admin_pwd", "") or "")
         if admin_user or admin_pwd:
             self.ses.auth = (admin_user, admin_pwd)
         try:

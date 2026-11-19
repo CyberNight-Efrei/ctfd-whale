@@ -17,7 +17,7 @@ services:
       - ACCESS_LOG=-
       - ERROR_LOG=-
       - REVERSE_PROXY=true
-      # Optional FRPC admin API HTTP Basic Auth; overrides Whale UI settings.
+      # Optional FRPC admin credentials; copied into empty Whale settings once on startup.
       - FRPC_ADMIN_USER=${FRPC_ADMIN_USER:-}
       - FRPC_ADMIN_PWD=${FRPC_ADMIN_PWD:-}
     volumes:

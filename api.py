@@ -19,6 +19,33 @@ admin_namespace = Namespace("ctfd-whale-admin")
 user_namespace = Namespace("ctfd-whale-user")
 
 
+def _serialize_admin_container(container):
+    """Build a JSON-safe, non-secret summary for the admin container API."""
+    return {
+        "id": container.id,
+        "user_id": container.user_id,
+        "challenge_id": container.challenge_id,
+        "start_time": container.start_time.isoformat() if container.start_time else None,
+        "renew_count": container.renew_count,
+        "status": container.status,
+        "lifecycle_state": container.lifecycle_state,
+        "uuid": container.uuid,
+        "node": container.node,
+        "port": container.port,
+        "port_mappings": [
+            {
+                "id": mapping.id,
+                "name": mapping.name,
+                "protocol": mapping.protocol,
+                "internal_port": mapping.internal_port,
+                "public_port": mapping.public_port,
+                "position": mapping.position,
+            }
+            for mapping in container.port_mappings
+        ],
+    }
+
+
 @admin_namespace.errorhandler
 @user_namespace.errorhandler
 def handle_default(err):
@@ -33,14 +60,18 @@ class AdminContainers(Resource):
     @staticmethod
     @admins_only
     def get():
-        page = abs(request.args.get("page", 1, type=int))
-        results_per_page = abs(request.args.get("per_page", 20, type=int))
+        page = max(1, abs(request.args.get("page", 1, type=int)))
+        results_per_page = max(1, abs(request.args.get("per_page", 20, type=int)))
         page_start = results_per_page * (page - 1)
         page_end = results_per_page * (page - 1) + results_per_page
 
         count = DBContainer.get_all_alive_container_count()
-        containers = DBContainer.get_all_alive_container_page(
-            page_start, page_end)
+        containers = [
+            _serialize_admin_container(container)
+            for container in DBContainer.get_all_alive_container_page(
+                page_start, page_end
+            )
+        ]
 
         return {'success': True, 'data': {
             'containers': containers,

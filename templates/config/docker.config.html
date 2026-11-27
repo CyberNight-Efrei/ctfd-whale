@@ -75,7 +75,7 @@
     </small><br>
     {% for config, val in {
         "Auto Connect Network": ("docker_auto_connect_network", "The network connected for single-containers. It's usually the same network as the frpc is in."),
-        "Dns Setting": ("docker_dns", "Decide which dns will be used in container network."),
+        "DNS Servers": ("docker_dns", "DNS servers for standalone and grouped instances. Enter valid IPv4/IPv6 addresses separated by commas, spaces or new lines (for example: 10.64.1.21, 10.64.1.22, 10.64.1.23)."),
     }.items() %}
         {% set value = get_config('whale:' + val[0]) %}
         <div class="form-group">

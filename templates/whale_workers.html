@@ -1,0 +1,218 @@
+{% extends "whale_base.html" %}
+
+{% block panel %}
+    <link rel="stylesheet" href="{{ url_for('plugins.ctfd-whale.assets', path='admin-workers.css') }}">
+    <section class="whale-workers-page">
+        <header class="whale-workers-header">
+            <div>
+                <h2><i class="fas fa-network-wired mr-2" aria-hidden="true"></i>Workers & FRP</h2>
+                <p>Surveillance des nœuds Docker Swarm, des agents FRPC et du serveur FRPS.</p>
+                <div class="whale-workers-summary">
+                    <span class="whale-worker-summary-item"><strong>{{ snapshot.summary.workers }}</strong> workers</span>
+                    <span class="whale-worker-summary-item"><strong>{{ snapshot.summary.online }}</strong> connectés</span>
+                    <span class="whale-worker-summary-item">
+                        <span class="whale-status-dot whale-status-dot-{{ snapshot.summary.frps }}" aria-hidden="true"></span>
+                        FRPS : {{ snapshot.summary.frps|capitalize }}
+                    </span>
+                </div>
+            </div>
+            <button class="btn btn-outline-secondary" type="button" id="whale-workers-refresh">
+                <i class="fas fa-sync-alt mr-1" aria-hidden="true"></i>Actualiser
+            </button>
+        </header>
+
+        {% if not snapshot.available %}
+            <div class="alert alert-danger" role="alert">
+                <strong>Docker Swarm indisponible.</strong> {{ snapshot.error }}
+            </div>
+        {% else %}
+            <section class="whale-monitor-section" aria-labelledby="whale-frps-title">
+                <div class="whale-monitor-section-heading">
+                    <div>
+                        <h3 id="whale-frps-title"><i class="fas fa-server mr-2" aria-hidden="true"></i>Serveur FRPS</h3>
+                        <p>État des services Swarm FRPS et des conteneurs FRPS locaux visibles depuis le manager.</p>
+                    </div>
+                </div>
+                {% if snapshot.frps_entries %}
+                    <div class="whale-monitor-grid whale-monitor-grid-server">
+                        {% for entry in snapshot.frps_entries %}
+                            <article class="whale-monitor-card">
+                                <div class="whale-monitor-card-heading">
+                                    <div class="whale-monitor-card-icon"><i class="fas fa-server" aria-hidden="true"></i></div>
+                                    <div class="whale-monitor-card-title">
+                                        <h4>{{ entry.name }}</h4>
+                                        <small>{{ entry.mode }} · {{ "Service Swarm" if entry.source == "service" else "Conteneur local" }}</small>
+                                    </div>
+                                    <span class="whale-monitor-state whale-monitor-state-{{ entry.state }}">
+                                        <span class="whale-status-dot whale-status-dot-{{ entry.state }}" aria-hidden="true"></span>{{ entry.state|capitalize }}
+                                    </span>
+                                </div>
+                                <div class="whale-monitor-metrics">
+                                    <span><strong>{{ entry.running }}</strong> tâche(s) active(s)</span>
+                                    {% if entry.desired is not none %}
+                                        <span>sur <strong>{{ entry.desired }}</strong> attendue(s)</span>
+                                    {% endif %}
+                                </div>
+                                {% if entry.image %}<p class="whale-monitor-image"><i class="fab fa-docker mr-1" aria-hidden="true"></i>{{ entry.image }}</p>{% endif %}
+                                {% if entry.last_error %}<p class="whale-monitor-error">{{ entry.last_error }}</p>{% endif %}
+                                <div class="whale-monitor-card-actions">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary whale-view-frp-logs"
+                                            data-source="{{ entry.source }}" data-source-id="{{ entry.id }}"
+                                            data-source-name="{{ entry.name }}">
+                                        <i class="fas fa-file-alt mr-1" aria-hidden="true"></i>Voir les logs
+                                    </button>
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="whale-monitor-empty">
+                        Aucun service ou conteneur FRPS n’a été trouvé sur le Swarm ou sur le daemon Docker du manager.
+                    </div>
+                {% endif %}
+            </section>
+
+            <section class="whale-monitor-section" aria-labelledby="whale-workers-title">
+                <div class="whale-monitor-section-heading">
+                    <div>
+                        <h3 id="whale-workers-title"><i class="fas fa-sitemap mr-2" aria-hidden="true"></i>Workers Swarm</h3>
+                        <p>Les nœuds affichés sont les workers dont le hostname commence par <code>worker</code>. La connexion Swarm et l’état de l’agent FRPC sont suivis séparément.</p>
+                    </div>
+                </div>
+                {% if snapshot.workers %}
+                    <div class="whale-monitor-grid">
+                        {% for worker in snapshot.workers %}
+                            <article class="whale-monitor-card">
+                                <div class="whale-monitor-card-heading">
+                                    <div class="whale-monitor-card-icon"><i class="fas fa-server" aria-hidden="true"></i></div>
+                                    <div class="whale-monitor-card-title">
+                                        <h4>{{ worker.name }}</h4>
+                                        <small>Worker Docker Swarm</small>
+                                    </div>
+                                    <span class="whale-monitor-state whale-monitor-state-{{ worker.status }}">
+                                        <span class="whale-status-dot whale-status-dot-{{ worker.status }}" aria-hidden="true"></span>{{ worker.status_label }}
+                                    </span>
+                                </div>
+                                <dl class="whale-monitor-details">
+                                    <div><dt>Nœud Swarm</dt><dd>{{ worker.state|capitalize }}</dd></div>
+                                    <div><dt>Disponibilité</dt><dd>{{ worker.availability|capitalize }}</dd></div>
+                                    <div>
+                                        <dt>Agent FRPC sur ce nœud</dt>
+                                        <dd>
+                                            <span class="whale-status-dot whale-status-dot-{{ worker.frpc_state }}" aria-hidden="true"></span>
+                                            {{ worker.frpc_label }}
+                                        </dd>
+                                    </div>
+                                    <div><dt>Tâches FRPC</dt><dd>{{ worker.frpc_task_count }}</dd></div>
+                                    <div><dt>Instances en cours sur ce worker</dt><dd>{{ worker.running_instances }}</dd></div>
+                                    <div class="whale-monitor-detail-wide">
+                                        <dt>Labels Docker</dt>
+                                        <dd><code>{{ worker.node_labels or "Aucun label" }}</code></dd>
+                                    </div>
+                                </dl>
+                                {% if worker.task_error %}<p class="whale-monitor-error">{{ worker.task_error }}</p>{% endif %}
+                                <p class="whale-monitor-node-id">ID : <code>{{ worker.id[:16] }}…</code></p>
+                                {% if snapshot.frpc_services %}
+                                    <div class="whale-monitor-card-actions">
+                                        {% for entry in snapshot.frpc_services %}
+                                            <button type="button" class="btn btn-sm btn-outline-secondary whale-view-frp-logs"
+                                                    data-source="service" data-source-id="{{ entry.id }}"
+                                                    data-source-name="{{ entry.name }}">
+                                                <i class="fas fa-file-alt mr-1" aria-hidden="true"></i>Logs {{ entry.name }}
+                                            </button>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </article>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="whale-monitor-empty">Aucun worker Swarm n’a été détecté. Le nœud manager est volontairement présenté séparément dans la section FRPS.</div>
+                {% endif %}
+            </section>
+
+            <section class="whale-monitor-section" aria-labelledby="whale-frpc-title">
+                <div class="whale-monitor-section-heading">
+                    <div>
+                        <h3 id="whale-frpc-title"><i class="fas fa-plug mr-2" aria-hidden="true"></i>Agents FRPC</h3>
+                        <p>Services FRPC Swarm et conteneurs FRPC locaux avec accès à leurs logs Docker.</p>
+                    </div>
+                </div>
+                {% if snapshot.frpc_entries %}
+                    <div class="whale-monitor-grid">
+                        {% for entry in snapshot.frpc_entries %}
+                            <article class="whale-monitor-card whale-monitor-card-compact">
+                                <div class="whale-monitor-card-heading">
+                                    <div class="whale-monitor-card-icon"><i class="fas fa-plug" aria-hidden="true"></i></div>
+                                    <div class="whale-monitor-card-title">
+                                        <h4>{{ entry.name }}</h4>
+                                        <small>{{ entry.mode }} · {{ "Service Swarm" if entry.source == "service" else "Conteneur local" }}</small>
+                                    </div>
+                                    <span class="whale-monitor-state whale-monitor-state-{{ entry.state }}">
+                                        <span class="whale-status-dot whale-status-dot-{{ entry.state }}" aria-hidden="true"></span>{{ entry.state|capitalize }}
+                                    </span>
+                                </div>
+                                <div class="whale-monitor-metrics">
+                                    <span><strong>{{ entry.running }}</strong> tâche(s) active(s)</span>
+                                    {% if entry.desired is not none %}<span>sur <strong>{{ entry.desired }}</strong> attendue(s)</span>{% endif %}
+                                </div>
+                                {% if entry.image %}<p class="whale-monitor-image">{{ entry.image }}</p>{% endif %}
+                                {% if entry.last_error %}<p class="whale-monitor-error">{{ entry.last_error }}</p>{% endif %}
+                                <div class="whale-monitor-card-actions">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary whale-view-frp-logs"
+                                            data-source="{{ entry.source }}" data-source-id="{{ entry.id }}"
+                                            data-source-name="{{ entry.name }}">
+                                        <i class="fas fa-file-alt mr-1" aria-hidden="true"></i>Voir les logs
+                                    </button>
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="whale-monitor-empty">Aucun service ou conteneur FRPC détecté.</div>
+                {% endif %}
+            </section>
+
+            <p class="whale-monitor-footnote">
+                <i class="fas fa-info-circle mr-1" aria-hidden="true"></i>
+                La pastille du worker indique uniquement son état de connexion au Swarm. La santé de FRPC et FRPS est évaluée séparément. En mode FRPC global, chaque agent reçoit uniquement les routes des challenges hébergés sur son worker ; le mode historique avec un seul agent reste compatible. Les logs d’un service Swarm sont agrégés par Docker ; les conteneurs autonomes sont consultés uniquement sur le daemon du manager.
+            </p>
+        {% endif %}
+    </section>
+
+    <div class="modal fade" id="whale-frp-logs-modal" tabindex="-1" role="dialog"
+         aria-labelledby="whale-frp-logs-title" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title" id="whale-frp-logs-title">Logs FRP</h5>
+                        <small class="text-muted">Sortie récente des services Docker</small>
+                    </div>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Fermer"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="whale-frp-logs-toolbar">
+                        <label for="whale-frp-logs-tail" class="mb-0">Lignes</label>
+                        <select class="form-control form-control-sm" id="whale-frp-logs-tail">
+                            <option value="100">100</option>
+                            <option value="200" selected>200</option>
+                            <option value="500">500</option>
+                            <option value="1000">1000</option>
+                        </select>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="whale-frp-logs-refresh">
+                            <i class="fas fa-sync-alt mr-1" aria-hidden="true"></i>Actualiser
+                        </button>
+                    </div>
+                    <p id="whale-frp-logs-status" class="small text-muted" role="status">Chargement des logs…</p>
+                    <pre id="whale-frp-logs-output" class="whale-frp-log-output"></pre>
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-dismiss="modal">Fermer</button></div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <script defer src="{{ url_for('plugins.ctfd-whale.assets', path='workers.js') }}"></script>
+{% endblock %}

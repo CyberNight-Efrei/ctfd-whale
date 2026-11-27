@@ -1,4 +1,5 @@
 import fcntl
+import os
 import re
 import warnings
 
@@ -21,6 +22,7 @@ from .utils.checks import WhaleChecks
 from .utils.control import ControlUtil
 from .utils.db import DBContainer
 from .utils.docker import DockerUtils
+from .utils.cluster import DockerClusterMonitor
 from .utils.exceptions import WhaleWarning
 from .utils.setup import setup_default_configs
 from .utils.routers import Router
@@ -28,6 +30,28 @@ from .utils.routers import Router
 
 # Keep the scheduler lock file open for the process lifetime.
 _scheduler_lock_file = None
+
+
+def _prefill_frpc_admin_settings():
+    """Copy FRPC admin environment values into empty Whale settings once.
+
+    The environment is used only as an initial source for the UI settings.
+    FrpRouter always reads the saved CTFd settings afterwards, so admins can
+    edit or clear the credentials without environment variables overriding
+    their choices on every request or restart.
+    """
+    if get_config("whale:frp_admin_env_defaults_applied") == "true":
+        return
+
+    for env_name, setting_name in (
+        ("FRPC_ADMIN_USER", "whale:frp_admin_user"),
+        ("FRPC_ADMIN_PWD", "whale:frp_admin_pwd"),
+    ):
+        value = os.environ.get(env_name)
+        if value and not get_config(setting_name, ""):
+            set_config(setting_name, value)
+
+    set_config("whale:frp_admin_env_defaults_applied", "true")
 
 
 def load(app):
@@ -39,6 +63,8 @@ def load(app):
     app.db.create_all()
     if not get_config("whale:setup"):
         setup_default_configs()
+
+    _prefill_frpc_admin_settings()
 
     register_plugin_assets_directory(
         app, base_path=f"/plugins/{plugin_name}/assets",
@@ -172,6 +198,12 @@ def load(app):
             instance_statuses=instance_statuses,
             status_counts=status_counts,
         )
+
+    @page_blueprint.route("/admin/workers")
+    @admins_only
+    def admin_list_workers():
+        snapshot = DockerClusterMonitor.snapshot()
+        return render_template("whale_workers.html", snapshot=snapshot)
 
     def auto_clean_container():
         with app.app_context():
